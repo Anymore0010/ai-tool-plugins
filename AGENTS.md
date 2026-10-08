@@ -33,18 +33,18 @@ omp-fast-update/               # 插件 C（工具类：并发分片自更新）
 
 | 项 | 值 |
 | --- | --- |
-| `user.name` | `YuCN` |
+| `user.name` | `Anymore0010` |
 | `user.email` | `yuchen0010@qq.com` |
 
 **在任何新机器上 clone 本仓库后，第一条命令就是设置仓库级身份**（不要依赖 global 配置——若该机器的 global 是公司身份，提交会直接把公司邮箱写进公开历史）：
 
 ```bash
-git config --local user.name  "YuCN"
+git config --local user.name  "Anymore0010"
 git config --local user.email "yuchen0010@qq.com"
 
 git config --local user.name                 # 核对
 git config --local user.email                # 核对
-git var GIT_AUTHOR_IDENT                     # 必须是 YuCN <yuchen0010@qq.com>
+git var GIT_AUTHOR_IDENT                     # 必须是 Anymore0010 <yuchen0010@qq.com>
 git log --format='author=%an <%ae> | committer=%cn <%ce>' -1
 ```
 
@@ -133,7 +133,7 @@ omp plugin upgrade
 ### 自检清单（换机或排查时跑一遍）
 
 ```bash
-git config --local user.name && git config --local user.email   # 必须是 YuCN / yuchen0010@qq.com
+git config --local user.name && git config --local user.email   # 必须是 Anymore0010 / yuchen0010@qq.com
 omp plugin list                                                 # 模式 A：三个都在
 grep -A3 '^extensions:' ~/.omp/agent/config.yml                 # 模式 A：不应有这些插件路径
 omp -p --no-session "只回答OK"                                   # 无 conflict/重复注册告警

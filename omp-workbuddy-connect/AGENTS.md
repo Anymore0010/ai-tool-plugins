@@ -33,19 +33,19 @@
 
 | 项 | 值 |
 | --- | --- |
-| `user.name` | `YuCN` |
+| `user.name` | `Anymore0010` |
 | `user.email` | `yuchen0010@qq.com` |
 
 **在任何新机器上 clone 本仓库后，第一条命令就是设置仓库级身份**（不要依赖 global 配置——若该机器的 global 是公司身份，提交会直接把公司邮箱写进公开历史）：
 
 ```bash
-git config --local user.name  "YuCN"
+git config --local user.name  "Anymore0010"
 git config --local user.email "yuchen0010@qq.com"
 
 # 核对：两条输出都必须是上面的值
 git config --local user.name
 git config --local user.email
-git var GIT_AUTHOR_IDENT      # 必须是 YuCN <yuchen0010@qq.com>
+git var GIT_AUTHOR_IDENT      # 必须是 Anymore0010 <yuchen0010@qq.com>
 ```
 
 提交后核对作者与提交者两个字段都已脱敏：
