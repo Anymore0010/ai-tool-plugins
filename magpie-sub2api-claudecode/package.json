@@ -1,0 +1,31 @@
+{
+  "name": "magpie-sub2api-claudecode",
+  "version": "0.1.0",
+  "description": "magpie provider plugin for a sub2api site whose group only allows Claude Code clients: the key's models and usage, with every request dressed as the Claude Code CLI.",
+  "type": "module",
+  "main": "./index.ts",
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "magpie",
+    "magpie-plugin",
+    "sub2api",
+    "claude-code",
+    "provider"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
+  },
+  "magpie": {
+    "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9InN1YjJhcGksIGRyZXNzZWQgYXMgQ2xhdWRlIENvZGUiPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiIiB4MT0iNzIiIHkxPSI0NCIgeDI9IjQ0MiIgeTI9IjQ3OCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRTA4QTZCIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjQjg1MDFGIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB4PSIxNiIgeT0iMTYiIHdpZHRoPSI0ODAiIGhlaWdodD0iNDgwIiByeD0iMTEyIiBmaWxsPSJ1cmwoI2IpIi8+CiAgPHBhdGggZD0iTTE1MCAxNjggTDI0NiAyNTYgTDE1MCAzNDQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0ZGRjRFRSIgc3Ryb2tlLXdpZHRoPSIzNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+CiAgPHJlY3QgeD0iMjgyIiB5PSIzMTgiIHdpZHRoPSI5OCIgaGVpZ2h0PSIzNiIgcng9IjE4IiBmaWxsPSIjRkZGNEVFIi8+CiAgPGNpcmNsZSBjeD0iMzkyIiBjeT0iMTI4IiByPSI1NCIgZmlsbD0iIzFGMTQwOSIgZmlsbC1vcGFjaXR5PSIuMjgiLz4KICA8cGF0aCBkPSJNMzkyIDEwMGMxNCAwIDI2IDExIDI2IDI1djE0YzAgMTQtMTIgMjUtMjYgMjVzLTI2LTExLTI2LTI1di0xNGMwLTE0IDEyLTI1IDI2LTI1eiIgZmlsbD0iI0ZGRjRFRSIvPgogIDxwYXRoIGQ9Ik0zNzAgMTQwaDQ0djEwYTIyIDIyIDAgMCAxLTQ0IDB6IiBmaWxsPSIjRkZGNEVFIi8+Cjwvc3ZnPg=="
+  }
+}

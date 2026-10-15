@@ -43,8 +43,9 @@ omp plugin upgrade
 | [`magpie-wingwork-connect`](./magpie-wingwork-connect) | 把 **iKooky（WingWork）** 接进 magpie（`wingwork/*`）。按其家族改写思考协议（5.5 一代要自适应，旧一代要 budget）。 |
 | [`magpie-astudio-connect`](./magpie-astudio-connect) | 把 **AStudio（讯飞 AstronClaw）** 接进 magpie（`astudio/*`）。按模型路由到它各自的后端网关，含额度卡片。 |
 | [`magpie-loomy-connect`](./magpie-loomy-connect) | 把 **Loomy** 接进 magpie（`loomy/*`）。名册里的上下文/输出上限、推理档位、点数倍率全部如实映射。 |
+| [`magpie-sub2api-claudecode`](./magpie-sub2api-claudecode) | 把**只放行 Claude Code 客户端的 [sub2api](https://github.com/Wei-Shaw/sub2api) 站点**接进 magpie（`sub2api-cc/*`）。填站点地址与 API Key 登录，请求头与请求体一并伪装成 Claude Code CLI（端点判定逐条对齐 sub2api 自己的校验）。 |
 
-它们跑在 magpie 自己的插件宿主（Bun）里，**与 omp 无关**：omp 不必安装、也不必运行。安装用 `magpie plugin add ./magpie-<name>-connect`，**不在** `.omp-plugin/marketplace.json` 里（它们不是 omp 插件）。
+它们跑在 magpie 自己的插件宿主（Bun）里，**与 omp 无关**：omp 不必安装、也不必运行。安装用 `magpie plugin add ./<目录名>`，**不在** `.omp-plugin/marketplace.json` 里（它们不是 omp 插件）。
 
 ## 仓库结构
 
@@ -60,6 +61,7 @@ omp-fast-update/               # omp 插件 F（工具类）
 magpie-wingwork-connect/       # magpie 供应商插件（不是 omp 插件，不进 marketplace）
 magpie-astudio-connect/        # 同上
 magpie-loomy-connect/          # 同上
+magpie-sub2api-claudecode/     # 同上（站点 API Key 登录 + Claude Code 伪装）
 ```
 
 约定：
@@ -100,7 +102,7 @@ node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json
 
 - 本仓库插件**仅供个人学习与研究使用**，驱动的是**你自己**机器上**你自己**的账号，不得用于商业用途或超出个人合理使用范围的情形。
 - 各插件依赖的是对应**客户端私有端点**（并非官方公开 API），上游随时可能变更协议，届时需跟进适配。使用第三方客户端访问你的账号须遵守相应服务条款，由此产生的后果由使用者自行承担。
-- 与腾讯 / WorkBuddy / CodeBuddy / 小米 / MiMo / 科大讯飞 / AStudio / AstronClaw / Kooky / WingWork / Loomy / xfinfr **无关联、未经授权、亦未获其背书**；产品名称仅用于描述兼容性，商标归各自所有者。
+- 与腾讯 / WorkBuddy / CodeBuddy / 小米 / MiMo / 科大讯飞 / AStudio / AstronClaw / Kooky / WingWork / Loomy / xfinfr / sub2api / Anthropic / Claude Code **无关联、未经授权、亦未获其背书**；产品名称仅用于描述兼容性，商标归各自所有者。
 - 作者对因使用或误用本项目造成的任何直接或间接损失不承担任何责任。
 
 ## 许可证
