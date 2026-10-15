@@ -74,7 +74,13 @@ magpie plugin options sub2api-cc '{"cliVersion":"2.1.280"}'
 | **key 自带额度或限速**（`mode: quota_limited`） | 套餐名 `API key limits` | `Key quota` + `5 hours` / `24 hours` / `7 days` |
 | **余额分组** | 套餐名 + 钱包余额 | 无（余额没有时间窗口，不参与路由） |
 
-周窗口的重置时间在站点没返回 `weekly_reset_at` 时按「本周窗口开始 + 7 天」推算；日、月窗口站点当前版本不返回重置时间，插件不猜（服务器时区的下一个零点 / 用到才滚动，客户端推不出来）。
+各窗口的重置时间：
+
+| 窗口 | 重置于 | 依据 |
+|---|---|---|
+| `24 hours` | 站点时区的**下一个零点** | 站点的每日数字是按自然日算的，且它的时间戳自带时区（如 `+08:00`），所以这一个不用猜 —— 站点自己的卡片也是这么倒计时的 |
+| `7 days` | `weekly_reset_at`，站点没给就用「本周窗口开始 + 7 天」 | 接口返回 `weekly_window_start` |
+| `30 days` | 只有站点返回 `monthly_reset_at` 时才有 | 站点的月窗口是固定的 30 天块，但接口只返回周窗口的起点（见限制） |
 
 思考等级取自站点的 `GET /backend-api/codex/models`，站点给不出时沿用 magpie 已有的等级，再没有就给会思考的模型 `low` / `medium` / `high`。
 
@@ -85,6 +91,8 @@ magpie plugin options sub2api-cc '{"cliVersion":"2.1.280"}'
 - 一个 key 只看得到它绑定分组的订阅。
 - 同一个 key 重复登录会多出一个账号，删掉多余的即可。
 - 站点判决与协议随时可能变化；如果哪天返回 503 而 key 本身可用，先试 `cliVersion`。
+- **月窗口没有倒计时**（除非站点返回 `monthly_reset_at`）：站点的月窗口是固定的 30 天块（不是自然月，也不是「用满才滚动」），而接口只返回 `weekly_window_start`。按用量数据反推块起点会落在该块内第一个有流量的日子上 —— 中间空闲几天就偏几天，所以不猜。
+- **套餐到期时间在 magpie 卡片上只显示月日**：插件交出去的是完整时间戳（`magpie quota --json` 与网关的 `GET /v1/magpie/quotas` 里能看到年份与时刻），magpie 的卡片把它格式化成「`N月N日`」而不带年份 —— 那是 magpie 自己的显示格式，插件改不了。
 
 ## 兼容性
 

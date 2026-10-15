@@ -441,6 +441,27 @@ function win(name: string, used: number, limit: number, extra: Json = {}): Json 
   }
 }
 
+// offsetOf is the UTC offset a timestamp from the site carries (+08:00 → 480).
+// The site's own clock is what its windows roll on, so its timestamps are the
+// only place its time zone is written down.
+function offsetOf(iso: unknown): number | undefined {
+  const found = typeof iso === "string" ? /([+-])(\d{2}):?(\d{2})$/.exec(iso.trim()) : null
+  if (found === null) return undefined
+  const sign = found[1] === "-" ? -1 : 1
+  return sign * (Number(found[2]) * 60 + Number(found[3]))
+}
+
+// nextMidnight is when the site's day window starts again: the next midnight
+// on the site's clock. Its daily figures are per calendar day, so this one is
+// known rather than guessed (the site's own card counts down to it; the week
+// and the month are anchored blocks, and only the week's start is reported).
+function nextMidnight(offsetMinutes: number, now: number = Date.now()): string {
+  const site = new Date(now + offsetMinutes * 60_000)
+  const midnight =
+    Date.UTC(site.getUTCFullYear(), site.getUTCMonth(), site.getUTCDate() + 1) - offsetMinutes * 60_000
+  return new Date(midnight).toISOString()
+}
+
 // fromUsage is magpie's usage from /v1/usage's reply, one of three:
 //   - "quota_limited": the key has its own quota or rate limits;
 //   - a subscription group: its day, week and month, each a window when the
@@ -505,8 +526,15 @@ function fromUsage(u: Json): Json {
     const weekReset =
       resetOf(subscription["weekly_reset_at"]) ??
       (Number.isFinite(weeklyAt) ? new Date(weeklyAt + 7 * DAY * 1000).toISOString() : undefined)
+    const siteOffset = offsetOf(subscription["weekly_window_start"]) ?? offsetOf(subscription["expires_at"])
     const rows: Array<[string, unknown, unknown, number, string | undefined]> = [
-      ["24 hours", subscription["daily_usage_usd"], subscription["daily_limit_usd"], DAY, resetOf(subscription["daily_reset_at"])],
+      [
+        "24 hours",
+        subscription["daily_usage_usd"],
+        subscription["daily_limit_usd"],
+        DAY,
+        resetOf(subscription["daily_reset_at"]) ?? (siteOffset === undefined ? undefined : nextMidnight(siteOffset)),
+      ],
       ["7 days", subscription["weekly_usage_usd"], subscription["weekly_limit_usd"], 7 * DAY, weekReset],
       ["30 days", subscription["monthly_usage_usd"], subscription["monthly_limit_usd"], 30 * DAY, resetOf(subscription["monthly_reset_at"])],
     ]

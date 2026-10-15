@@ -1,6 +1,6 @@
 {
   "name": "magpie-sub2api-claudecode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "magpie provider plugin for a sub2api site whose group only allows Claude Code clients: the key's models and usage, with every request dressed as the Claude Code CLI.",
   "type": "module",
   "main": "./index.ts",
