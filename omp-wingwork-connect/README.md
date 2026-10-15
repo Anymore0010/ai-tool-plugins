@@ -6,6 +6,21 @@
 
 > ⚠️ 仅供个人研究/学习用途 —— 驱动的是**你自己的** iKooky 账号，仅在本机运行。与科大讯飞 / iFlytek / Kooky / WingWork 无任何关联；请遵守相应服务条款。
 
+
+## ⚠️ 当前上游状态：网关要求令牌带 `tid`（暂不可用）
+
+实测（2026-10-15）：本机桌面端 `Local Storage` 里保存的账号 JWT（签发于 2026-06-30）在换取令牌时被网关拒绝：
+
+```
+GET https://one.iflytek.com/kooky-api/api/client/v3/cli/config
+  Authorization: Bearer <账号 JWT>
+→ 401 {"detail":"Token tid required"}
+```
+
+已排除的可能：`token` / `bk_token` / `tid` / `X-Tenant-Id` / `tenantId` / `domain` / `clientType` 等请求头组合**都不能**满足它（逐一实测），而桌面端自己的 `cli/config` 调用只发 `Authorization: Bearer` —— 也就是说 **`tid` 是令牌本身必须携带的声明**，而现存令牌没有该声明。这是**上游变更**，与插件无关。
+
+**修复方式**：在 iKooky（WingWork）桌面端**重新登录一次**，让桌面端重新签发令牌，然后重开会话即可。同样的报错也会出现在 magpie 侧的 [`magpie-wingwork-connect`](../magpie-wingwork-connect) 上。
+
 ## 工作原理
 
 iKooky 桌面端把模型请求发往 One 平台网关上的一个 **Anthropic Messages 兼容面**，并用一个 `sk-…` 令牌鉴权：

@@ -1,0 +1,22 @@
+{
+  "name": "magpie-loomy-connect",
+  "version": "0.1.0",
+  "description": "magpie provider plugin for Loomy: reuses the desktop app's sign-in, no API key needed.",
+  "type": "module",
+  "main": "./index.ts",
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "magpie",
+    "loomy"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
+  }
+}
