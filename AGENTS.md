@@ -19,7 +19,7 @@ omp-mimo-connect/              # 插件 B
 omp-wingwork-connect/          # 插件 C
 omp-astudio-connect/           # 插件 D
 omp-fast-update/               # 插件 E（工具类：并发分片自更新）
-magpie-astudio-middleware/     # 附带物：magpie 网关中间件（不是 omp 插件，见下）
+magpie-astudio-connect/        # 附带物：magpie 供应商插件（不是 omp 插件，见下）
 ```
 
 - **一个插件 = 一个子目录 = 一个独立 npm 包**，自带 `package.json` / `tsconfig.json` / `src/` / `README.md`。
@@ -29,7 +29,7 @@ magpie-astudio-middleware/     # 附带物：magpie 网关中间件（不是 omp
 - **`marketplace.json` 的 `version` 必须与该子目录 `package.json#version` 一致**：omp 的 `checkForUpdates()` 会**跳过没有 `version` 字段的 catalog 条目**（源码注释即 "Catalog entries without a version field are skipped."），缺失会导致 `omp plugin upgrade` 与开机自动更新**永久静默跳过**该插件。版本解析优先级为 catalog `version` > 子目录清单 > git sha。
 - 子目录内**不得**放另一个仓库的 `.git`；仓库根只有一份 git 历史。
 - 每个插件的运行时依赖必须为零（只用 Node 内置模块）；`@oh-my-pi/pi-coding-agent` 仅作 dev 类型依赖。
-- **`magpie-astudio-middleware/` 不在 `marketplace.json` 里**：它是 [magpie](https://usemagpie.ai/) 的网关中间件（`package.json#magpie.middleware`，纯 JS，跑在 magpie 进程内的 moejs 里），与 omp 插件体系无关。它的 `package.json` **故意不写** `main`/`exports`/`index.*`——magpie 正是据此判定"这个包只是中间件，插件宿主不用加载它"。用 `magpie plugin add ./magpie-astudio-middleware` 安装，沙箱验证见该目录 README。
+- **`magpie-astudio-connect/` 不在 `marketplace.json` 里**：它是 [magpie](https://usemagpie.ai/) 的**供应商插件**（OpenCode v1 形式，入口 `index.ts`，由 magpie 用 Bun 加载），与 omp 插件体系无关，用 `magpie plugin add ./magpie-astudio-connect` 安装。它**复用同一份桌面登录态**（与 `omp-astudio-connect` 相同的读取逻辑），但**不依赖 omp**：令牌只在各自进程内存里，两者可同时装、也可只装其一。它的版本号独立，发版走 `magpie plugin add <git/npm>` 那条路，不需要 omp marketplace 的 catalog 条目。
 
 ## 提交身份（强制，首次 clone 后必须先做）
 
