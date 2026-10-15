@@ -303,8 +303,17 @@ interface PointsSnapshot {
 }
 
 const LEDGER_PAGE_SIZE = 100
-/** How many ledger pages the walk may span before it gives up. */
+/** How many ledger pages one quota read may span before it gives up. */
 const LEDGER_MAX_PAGES = 10
+/**
+ * Wall-clock budget for the whole ledger walk.
+ *
+ * Today's pool only needs the newest cycle, which the first page covers, but
+ * the long-term pool wants the whole ledger. Reading it is best-effort: a
+ * large account could otherwise turn one quota card into ten slow requests and
+ * blow the caller's timeout, losing the daily window with it.
+ */
+const LEDGER_BUDGET_MS = 4_000
 
 /**
  * Read the account's two point pools and what has been spent from each.
@@ -319,8 +328,12 @@ const LEDGER_MAX_PAGES = 10
 async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
   const rows: Record<string, unknown>[] = []
   const snapshot: PointsSnapshot = {}
+  const deadline = Date.now() + LEDGER_BUDGET_MS
   let total: number | undefined
+  /** Today's cycle is fully in hand, however much of the rest was read. */
   let covered = false
+  /** The walk reached the end of the ledger. */
+  let complete = false
   for (let pageNo = 1; pageNo <= LEDGER_MAX_PAGES; pageNo++) {
     const payload = await requestJson(
       `${livePointsBase()}/api/v1/points/records?pageNo=${pageNo}&pageSize=${LEDGER_PAGE_SIZE}&recordType=all`,
@@ -350,17 +363,23 @@ async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
       break
     }
     snapshot.cycleDate ??= asText(rows[0]?.dailyCycleDate)
-    // Rows are newest-first, so a short page, the end of the ledger, or a row
-    // from an older cycle all mean the newest cycle is fully in hand.
-    if (list.length < LEDGER_PAGE_SIZE || (total !== undefined && rows.length >= total)) {
+    // Rows are newest-first, so reaching the end of the ledger settles both
+    // questions at once; a short page is that same end.
+    if (total !== undefined && rows.length >= total) {
       covered = true
+      complete = true
       break
     }
+    if (list.length < LEDGER_PAGE_SIZE) {
+      covered = true
+      complete = true
+      break
+    }
+    // Leaving the newest cycle is all today's pool needs; the long-term pool
+    // still needs the rest, so the walk keeps going until it runs out of time.
     const lastCycle = asText(rows[rows.length - 1]?.dailyCycleDate)
-    if (lastCycle !== undefined && lastCycle !== snapshot.cycleDate) {
-      covered = true
-      break
-    }
+    if (lastCycle !== undefined && lastCycle !== snapshot.cycleDate) covered = true
+    if (covered && Date.now() >= deadline) break
   }
   // Long-term pool: what it holds plus everything spent out of it. Non-daily
   // spends are the only debits that touch it — the daily pool is drained first.
@@ -371,7 +390,9 @@ async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
     longSpent += asNumber(row.pointsActual) ?? 0
   }
   snapshot.longSpent = longSpent
-  if (total !== undefined && rows.length >= total && snapshot.balance !== undefined) {
+  // A partial ledger would put a wrong denominator under the bar, so the
+  // long-term pool's total is only claimed once the walk reached the end.
+  if (complete && snapshot.balance !== undefined) {
     snapshot.longEarned = snapshot.balance + longSpent
   }
   const cycle = snapshot.cycleDate

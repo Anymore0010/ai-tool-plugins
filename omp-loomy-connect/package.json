@@ -1,6 +1,6 @@
 {
   "name": "omp-loomy-connect",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Bring Loomy desktop models into omp with zero configuration (reuses the app's sign-in).",
   "type": "module",
   "omp": {
