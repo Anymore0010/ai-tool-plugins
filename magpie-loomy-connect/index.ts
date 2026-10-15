@@ -58,6 +58,17 @@ const APP_NAME = "Loomy"
 const DEFAULT_CONTEXT_WINDOW = 128_000
 const DEFAULT_OUTPUT = 32_768
 
+/**
+ * The platform's daily free allowance, in points.
+ *
+ * Loomy grants every account a fresh daily pool and keeps a separate long-term
+ * pool (earned from tasks, or topped up by a reset). The daily total is not
+ * published anywhere, so this constant is the fallback for the one moment it
+ * cannot be recovered from the ledger — it is a platform number, not a guess
+ * at the account's balance.
+ */
+const DAILY_ALLOWANCE = 5_000
+
 interface Credential {
   session: string
   userid?: string
@@ -256,6 +267,111 @@ function randomHex(bytes: number): string {
   const values = new Uint8Array(bytes)
   crypto.getRandomValues(values)
   return Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("")
+}
+
+/**
+ * The account's point buckets, and how much of today's has been spent.
+ *
+ * The platform publishes no total for the daily bucket, but it does not need
+ * one: records are newest-first and carry the cycle date, so the bucket's
+ * starting grant is what is left plus what was spent out of it today —
+ * `dailyBalance + consumedToday`. Coverage of *today* is what makes that
+ * honest, so `consumed` stays undefined unless every record of the newest
+ * cycle was read (a short page, or the first record of an older cycle, ends
+ * the walk).
+ */
+interface PointsSnapshot {
+  balance?: number
+  dailyBalance?: number
+  available?: number
+  /** Net points taken out of today's bucket (credits count negative). */
+  consumed?: number
+  /** What today's bucket started with; derived, not published. */
+  grant?: number
+  cycleDate?: string
+}
+
+const LEDGER_PAGE_SIZE = 100
+/** How many ledger pages one day's usage may span before it is left unread. */
+const LEDGER_MAX_PAGES = 10
+
+async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
+  const rows: Record<string, unknown>[] = []
+  const snapshot: PointsSnapshot = {}
+  let total: number | undefined
+  let covered = false
+  for (let pageNo = 1; pageNo <= LEDGER_MAX_PAGES; pageNo++) {
+    const payload = await requestJson(
+      `${livePointsBase()}/api/v1/points/records?pageNo=${pageNo}&pageSize=${LEDGER_PAGE_SIZE}&recordType=all`,
+      credential,
+      "points balance",
+    )
+    const outer = asRecord(payload)
+    const code = asText(outer?.code)
+    if (code !== undefined && code !== "000000") {
+      throw new Error(asText(outer?.desc) ?? `Loomy answered ${code}`)
+    }
+    const data = asRecord(outer?.data)
+    if (data === undefined) break
+    if (pageNo === 1) {
+      snapshot.balance = asNumber(data.balance)
+      snapshot.dailyBalance = asNumber(data.dailyBalance)
+      snapshot.available = asNumber(data.availableBalance)
+      snapshot.cycleDate = undefined
+    }
+    const list = Array.isArray(data.list) ? data.list : []
+    total = asNumber(data.total) ?? total
+    for (const entry of list) {
+      const row = asRecord(entry)
+      if (row !== undefined) rows.push(row)
+    }
+    const lastCycle = asText(rows[rows.length - 1]?.dailyCycleDate)
+    if (rows.length === 0) {
+      covered = true
+      break
+    }
+    if (snapshot.cycleDate === undefined) snapshot.cycleDate = asText(rows[0]?.dailyCycleDate)
+    // Rows are newest-first, so once a record from an older cycle is in hand,
+    // the newest cycle is complete.
+    if (list.length < LEDGER_PAGE_SIZE || (total !== undefined && rows.length >= total)) {
+      covered = true
+      break
+    }
+    if (lastCycle !== undefined && lastCycle !== snapshot.cycleDate) {
+      covered = true
+      break
+    }
+  }
+  if (!covered) return snapshot
+  const cycle = snapshot.cycleDate
+  if (cycle === undefined) return snapshot
+  let consumed = 0
+  for (const row of rows) {
+    if (asText(row.dailyCycleDate) !== cycle) continue
+    // Only the daily bucket is being measured; the long-term pool is separate.
+    if (asText(row.consumeSource) !== "daily") continue
+    const points = asNumber(row.pointsActual) ?? 0
+    consumed += asText(row.direction) === "credit" ? -points : points
+  }
+  snapshot.consumed = consumed
+  if (snapshot.dailyBalance !== undefined && consumed >= 0) {
+    snapshot.grant = snapshot.dailyBalance + consumed
+  }
+  return snapshot
+}
+
+/**
+ * When the daily bucket refills: the next local midnight after the cycle date
+ * the ledger reports. The platform states the cycle as a calendar date, which
+ * is the only boundary it ever names.
+ */
+function nextCycleStart(cycleDate: string | undefined): string | undefined {
+  const match = cycleDate === undefined ? null : /^(\d{4})-(\d{2})-(\d{2})$/u.exec(cycleDate)
+  if (match === null) return undefined
+  const start = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  if (Number.isNaN(start.getTime())) return undefined
+  start.setDate(start.getDate() + 1)
+  return start.toISOString()
 }
 
 /**
@@ -522,24 +638,38 @@ export const LoomyAuthPlugin = async () => ({
         const { credential } = currentOrThrow(auth)
         // `/api/v1/points/records` is the only balance a personal account has:
         // `team-points/balance` answers "not switched to a team" for it, and
-        // the records envelope carries the spendable total.
-        const payload = await requestJson(
-          `${livePointsBase()}/api/v1/points/records?pageNo=1&pageSize=1&recordType=all`,
-          credential,
-          "points balance",
-        )
-        const outer = asRecord(payload)
-        const code = asText(outer?.code)
-        if (code !== undefined && code !== "000000") {
-          throw new Error(asText(outer?.desc) ?? `Loomy answered ${code}`)
-        }
-        const inner = asRecord(outer?.data)
-        const balance =
-          inner === undefined ? undefined : asNumber(inner.availableBalance ?? inner.balance ?? inner.currentBalance)
+        // this envelope carries both buckets — the long-term one (`balance`)
+        // and today's (`dailyBalance`).
+        const points = await pointsSnapshot(credential)
+        // The daily pool's total is never published, so it is taken from the
+        // ledger (what is left plus what was spent out of it today) and falls
+        // back to the platform's own daily allowance when today's rows could
+        // not all be read. Either way the bar describes *today*, and the
+        // long-term pool — fed by tasks and resets, with no ceiling — is
+        // spelled out beside it rather than drawn as a share of nothing.
+        const spendable = points.dailyBalance
+        const consumed =
+          points.consumed ?? (spendable === undefined ? undefined : DAILY_ALLOWANCE - spendable)
+        const grant = points.grant ?? DAILY_ALLOWANCE
+        const long = points.balance
+        const windows =
+          spendable === undefined || consumed === undefined || grant <= 0
+            ? []
+            : [
+                {
+                  name: "每日积分",
+                  used: (consumed / grant) * 100,
+                  display: `${spendable} / ${grant} 分${long === undefined ? "" : ` · 长期 ${long}`}`,
+                  ...(nextCycleStart(points.cycleDate) === undefined
+                    ? {}
+                    : { resetsAt: nextCycleStart(points.cycleDate) }),
+                  span: 86_400,
+                },
+              ]
         return {
           plan: "Loomy",
-          balance: balance === undefined ? undefined : `${balance} 分`,
-          windows: [],
+          balance: points.available === undefined ? undefined : `${points.available} 分`,
+          windows,
           // Reading the balance says nothing about the sign-in, so the account
           // keeps whatever state it had.
           signIn: "kept",

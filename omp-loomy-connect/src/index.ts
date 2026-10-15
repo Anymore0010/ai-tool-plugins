@@ -149,7 +149,7 @@ export default async function loomyConnect(pi: ExtensionAPI): Promise<void> {
           status.state === "ready"
             ? await client.fetchBalance(status.credential, livePointsBase()).catch(() => ({}))
             : {}
-        const points = account.balance === undefined ? "" : `，剩余积分 ${account.balance}`
+        const points = describePoints(account)
         const after = await shim.models()
         const added = after.filter(model => !before.has(model.id)).length
         ctx.ui.notify(
@@ -160,6 +160,7 @@ export default async function loomyConnect(pi: ExtensionAPI): Promise<void> {
         )
       },
     })
+
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     pi.logger.error("loomy-connect: shim failed to start", { error: message })
@@ -168,4 +169,27 @@ export default async function loomyConnect(pi: ExtensionAPI): Promise<void> {
   pi.on("session_shutdown", () => {
     shim.close()
   })
+}
+
+/**
+ * The points line for the refresh notice.
+ *
+ * Loomy keeps two pools: a **daily** one (the platform's free allowance,
+ * refilled every day) and a **long-term** one (earned from tasks, or topped up
+ * by a reset, with no ceiling). Only the daily pool has a total, so only it
+ * gets a ratio; the long-term pool is reported as an amount.
+ */
+function describePoints(account: LoomyAccountSnapshot): string {
+  if (account.available === undefined) return ""
+  const parts = [`剩余 ${account.available} 分`]
+  if (account.dailyBalance !== undefined || account.balance !== undefined) {
+    const daily = account.dailyBalance === undefined ? "?" : `${account.dailyBalance}`
+    const long = account.balance === undefined ? "?" : `${account.balance}`
+    parts.push(`每日 ${daily} + 长期 ${long}`)
+  }
+  if (account.grant !== undefined && account.consumed !== undefined && account.grant > 0) {
+    const percent = Math.round((account.consumed / account.grant) * 100)
+    parts.push(`今日已用 ${account.consumed}/${account.grant}（${percent}%）`)
+  }
+  return `，${parts.join("，")}`
 }

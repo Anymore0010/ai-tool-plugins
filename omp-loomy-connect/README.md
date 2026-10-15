@@ -31,8 +31,10 @@ Loomy 没有推理 API Key：它登录讯飞账号后把 **账号 session 令牌
 | 模型名册 | `GET {base}/models` 由**服务端控制**，比 OpenAI 的格式丰富：`protocol`、`context_length`、`max_output_tokens`、`reasoning_efforts`、`default_reasoning_effort`、`capabilities{reasoning,vision,function_calling,streaming,input_modalities}` | 全部如实映射到 omp 的模型配置（上下文/输出上限、推理档位、图片输入） |
 | 模型类型 | `type` 有 `chat` 与 `image` 两种；生图模型（`Hy-Image-3.5-preview`、`doubao-seedream-5-lite`、`qwen-image-3.0-pro`）不是对话模型 | 只把 `type === "chat"` 的模型注册给 omp |
 | 点数倍率 | **印在显示名里**：`DeepSeek V4.1 Flash(x2.0)`、`qwen 3.8 flash（x0.8）`（全角/半角括号都有）；`x0.0` 表示限时免费 | 解析出来显示在模型名后面（omp 的 cost 是美元概念，装不下点数） |
-| 计费 | 按**点数**，响应的 `usage.points_consumed` 给出每次请求实际消耗 | `/loomy-refresh` 与 `/v1/status` 报告剩余点数 |
-| 剩余点数 | 个人账号**没有**独立的余额接口：`/api/v1/team-points/balance` 会回 `当前未切换到团队`；`GET /api/v1/points/records?pageNo=1&pageSize=1&recordType=all` 的 `data.availableBalance` 才是可用总额 | 用后者，且点数服务基址取推理同源（`points-config.json` 里存的可能是**另一个环境**、会拒绝当前登录态） |
+| 计费 | 按**点数**，响应的 `usage.points_consumed` 给出每次请求实际消耗 | `/loomy-refresh` 与 `/v1/status` 报告点数 |
+| 点数结构 | 个人账号**没有**独立余额接口（`/api/v1/team-points/balance` 回 `当前未切换到团队`），但 `GET /api/v1/points/records?...&recordType=all` 同时给出两个桶：`balance`（长期池）、`dailyBalance`（**当日额度桶**）、`availableBalance`（= 两者之和，即可用总额）；每条记录带 `dailyCycleDate` 与 `consumeSource`（`daily` 表示从当日桶扣） | 用这个接口；点数服务基址取推理同源（`points-config.json` 里存的可能是**另一个环境**、会拒绝当前登录态） |
+| 点数模型 | **两个池子**：**每日积分**（平台每天赠送 **5000** 分，按 `dailyCycleDate` 每日重置）与**长期积分**（做任务或「重置」获得，无上限、不随日清零）。可用总额 = 两者之和 | omp 侧在 `/v1/status` 与 `/loomy-refresh` 里把两个池子分开报（`每日 4962 + 长期 10500`），并给出今日已用比例 |
+| 每日额度总量 | **不发布**（`dailyLimitPoints` 那一族字段服务端从不返回，Loomy 自己的 UI 也只是宽容解析） | 优先用账本反推 `grant = dailyBalance + 今日 daily 净消耗`（记录按时间倒序，读到旧周期或读完即算覆盖；本机实测 `4962 + 38 = 5000`，整数自证）；账本读不全时回退到平台常量 5000，并在 README 标注这是常量而非本账号的账本 |
 | 思考开关 | `enable_thinking`（Qwen 风格）与 `reasoning_effort` 都接受；名册为每个模型声明了 `reasoning_efforts`（`none`…`xhigh`）与默认档 | `compat.thinkingFormat = "qwen"` 同时下发两者；推理从 `reasoning_content` 读回 |
 
 ### 名册即配置
