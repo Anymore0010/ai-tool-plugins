@@ -16,7 +16,10 @@ AGENTS.md                      # 本文件：仓库规范
 README.md  LICENSE  .gitignore # 仓库级文件
 omp-workbuddy-connect/         # 插件 A
 omp-mimo-connect/              # 插件 B
-omp-fast-update/               # 插件 C（工具类：并发分片自更新）
+omp-wingwork-connect/          # 插件 C
+omp-astudio-connect/           # 插件 D
+omp-fast-update/               # 插件 E（工具类：并发分片自更新）
+magpie-astudio-middleware/     # 附带物：magpie 网关中间件（不是 omp 插件，见下）
 ```
 
 - **一个插件 = 一个子目录 = 一个独立 npm 包**，自带 `package.json` / `tsconfig.json` / `src/` / `README.md`。
@@ -26,6 +29,7 @@ omp-fast-update/               # 插件 C（工具类：并发分片自更新）
 - **`marketplace.json` 的 `version` 必须与该子目录 `package.json#version` 一致**：omp 的 `checkForUpdates()` 会**跳过没有 `version` 字段的 catalog 条目**（源码注释即 "Catalog entries without a version field are skipped."），缺失会导致 `omp plugin upgrade` 与开机自动更新**永久静默跳过**该插件。版本解析优先级为 catalog `version` > 子目录清单 > git sha。
 - 子目录内**不得**放另一个仓库的 `.git`；仓库根只有一份 git 历史。
 - 每个插件的运行时依赖必须为零（只用 Node 内置模块）；`@oh-my-pi/pi-coding-agent` 仅作 dev 类型依赖。
+- **`magpie-astudio-middleware/` 不在 `marketplace.json` 里**：它是 [magpie](https://usemagpie.ai/) 的网关中间件（`package.json#magpie.middleware`，纯 JS，跑在 magpie 进程内的 moejs 里），与 omp 插件体系无关。它的 `package.json` **故意不写** `main`/`exports`/`index.*`——magpie 正是据此判定"这个包只是中间件，插件宿主不用加载它"。用 `magpie plugin add ./magpie-astudio-middleware` 安装，沙箱验证见该目录 README。
 
 ## 提交身份（强制，首次 clone 后必须先做）
 
@@ -160,6 +164,12 @@ git pull --ff-only origin main
 cd $P
 npm install                                                        # 首次或依赖变更后
 node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json  # 必须 exit 0
+```
+
+**不改任何配置就能端到端自测**（`-e` 只给本次进程加载该入口，不写 `config.yml`、不碰 marketplace）：
+
+```bash
+omp -e "$PWD/src/index.ts" --model <provider>/<model> -p --no-session "只回答：OK"
 ```
 
 在 omp 里实测加载（本机开发用 `config.yml`，见 README）：

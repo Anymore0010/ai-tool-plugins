@@ -14,6 +14,7 @@ omp plugin marketplace add Anymore0010/omp-plugins
 omp plugin install omp-workbuddy-connect@omp-plugins
 omp plugin install omp-mimo-connect@omp-plugins
 omp plugin install omp-wingwork-connect@omp-plugins
+omp plugin install omp-astudio-connect@omp-plugins
 omp plugin install omp-fast-update@omp-plugins
 
 # 查看与升级
@@ -28,9 +29,18 @@ omp plugin upgrade
 | [`omp-workbuddy-connect`](./omp-workbuddy-connect) | 把 **WorkBuddy 桌面版**的模型接入 omp（`workbuddy/*`）。loopback shim + 复用桌面端鉴权文件。 | 已安装并登录 WorkBuddy 桌面版；omp ≥ 17.4.0 |
 | [`omp-mimo-connect`](./omp-mimo-connect) | 把 **小米 MiMo 桌面版**的模型接入 omp（`mimo/*`）。Chromium Cookie 解密 + SSO 换 serviceToken。 | 已安装并登录 MiMo 桌面版；首次读取 Cookie 需关闭 MiMo |
 | [`omp-wingwork-connect`](./omp-wingwork-connect) | 把 **iKooky（WingWork）桌面版**账号的模型接入 omp（`wingwork/*`）。读取桌面端 Local Storage 里的账号 JWT，换取网关令牌后按 Anthropic 协议透明转发。 | 已安装并登录 iKooky（WingWork）桌面版 |
+| [`omp-astudio-connect`](./omp-astudio-connect) | 把 **AStudio（讯飞 AstronClaw）桌面版**账号的模型接入 omp（`astudio/*`）。读桌面端 `astron-session.json`，向工作室接口换取每模型 `base_url`+令牌，再按 OpenAI chat-completions 透明转发。 | 已安装并登录 AStudio 桌面版 |
 | [`omp-fast-update`](./omp-fast-update) | **并发分片自更新**：`/omp-update` 多连接 Range 下载 GitHub release 二进制，绕过 `omp update` 的单连接限速（实测 0.3 → 3.6 MB/s）。 | 独立二进制安装（非 bun/npm/brew/mise 管理） |
 
 各插件的原理、风险与限制见各自子目录的 `README.md`（MiMo 的上游协议细节见其 `RESEARCH.md`）。
+
+## 附带：magpie 网关中间件
+
+| 目录 | 说明 | 前提 |
+| --- | --- | --- |
+| [`magpie-astudio-middleware`](./magpie-astudio-middleware) | [magpie](https://usemagpie.ai/) 的**网关中间件**：把 AStudio 的三套模型名（显示名/内部 id/大小写）归一成网关真正接受的 wire id，给 chat 请求补上 `enable_thinking`，并把上游那句 `10404 no category route found` 改写成可照着修的话。 | magpie；且 magpie 里已有某种 AStudio 模型来源 |
+
+它不是 omp 插件（没有 `omp.extensions`），因此**不在** `.omp-plugin/marketplace.json` 里；用 `magpie plugin add <目录>` 安装。详见该目录的 README。
 
 ## 仓库结构
 
@@ -38,9 +48,11 @@ omp plugin upgrade
 .omp-plugin/marketplace.json   # marketplace 目录：插件清单（name / source / version）
 AGENTS.md                      # 本仓库的开发与发布规范（提交身份、版本流程、tag 命名）
 omp-workbuddy-connect/         # 插件 A（独立 npm 包，独立版本号）
-omp-mimo-connect/              # 插件 B（独立 npm 包，独立版本号）
-omp-wingwork-connect/          # 插件 C（独立 npm 包，独立版本号）
-omp-fast-update/               # 插件 D（独立 npm 包，独立版本号）
+omp-mimo-connect/              # 插件 B
+omp-wingwork-connect/          # 插件 C
+omp-astudio-connect/           # 插件 D
+omp-fast-update/               # 插件 E（工具类）
+magpie-astudio-middleware/     # magpie 侧附带物（网关中间件，不属于 omp marketplace）
 ```
 
 约定：
@@ -60,7 +72,14 @@ extensions:
   - D:/Projects/omp-plugins/omp-workbuddy-connect
   - D:/Projects/omp-plugins/omp-mimo-connect
   - D:/Projects/omp-plugins/omp-wingwork-connect
+  - D:/Projects/omp-plugins/omp-astudio-connect
   - D:/Projects/omp-plugins/omp-fast-update
+```
+
+不改配置的临时加载：
+
+```bash
+omp -e D:/Projects/omp-plugins/omp-astudio-connect/src/index.ts --model astudio/xopglm52 -p --no-session "只回答：OK"
 ```
 
 类型检查（在每个插件子目录内）：
@@ -71,9 +90,9 @@ node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json
 
 ## 免责声明
 
-- 本仓库插件**仅供个人学习与研究使用**，驱动的是**你自己**机器上**你自己**的账号，不得用于商业用途或超出个人合理使用范围的情形。
+- 本仓库插件（含 magpie 中间件）**仅供个人学习与研究使用**，驱动的是**你自己**机器上**你自己**的账号，不得用于商业用途或超出个人合理使用范围的情形。
 - 各插件依赖的是对应**客户端私有端点**（并非官方公开 API），上游随时可能变更协议，届时需跟进适配。使用第三方客户端访问你的账号须遵守相应服务条款，由此产生的后果由使用者自行承担。
-- 与腾讯 / WorkBuddy / CodeBuddy / 小米 / MiMo **无关联、未经授权、亦未获其背书**；产品名称仅用于描述兼容性，商标归各自所有者。
+- 与腾讯 / WorkBuddy / CodeBuddy / 小米 / MiMo / 科大讯飞 / AStudio / AstronClaw **无关联、未经授权、亦未获其背书**；产品名称仅用于描述兼容性，商标归各自所有者。
 - 作者对因使用或误用本项目造成的任何直接或间接损失不承担任何责任。
 
 ## 许可证
