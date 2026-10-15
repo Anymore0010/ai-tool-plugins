@@ -68,14 +68,18 @@ export interface LoomyModel {
 }
 
 /**
- * The account's point buckets.
+ * The account's point pools.
  *
- * `available` is what a request may spend (the long-term pool plus today's
- * bucket). The platform publishes no total for the daily bucket, so `grant`
- * is derived from the account's own ledger: what is left plus what was spent
- * out of it today (`dailyBalance + consumed`). It is left `undefined` unless
- * every record of today's cycle was read, so a partial read never turns into
- * a made-up figure.
+ * Loomy keeps two: a **daily** one (the platform's free allowance, refilled
+ * every day) and a **long-term** one (earned from tasks or a reset, with no
+ * ceiling). `available` is what a request may spend — the two together.
+ *
+ * Neither total is published, so both are derived from the account's own
+ * ledger and each is only set when the rows it needs were actually read:
+ * `grant` (today's pool) from what is left plus what was spent out of it
+ * today, `longEarned` (the long-term pool) from what is left plus what was
+ * spent out of it ever. A partial read leaves the field unset rather than
+ * putting a wrong denominator under a bar.
  */
 export interface LoomyAccountSnapshot {
   balance?: number
@@ -83,6 +87,8 @@ export interface LoomyAccountSnapshot {
   dailyBalance?: number
   consumed?: number
   grant?: number
+  longSpent?: number
+  longEarned?: number
   cycleDate?: string
 }
 
@@ -326,6 +332,18 @@ export class LoomyUpstreamClient {
         covered = true
         break
       }
+    }
+    // Long-term pool: what it holds plus everything spent out of it. Non-daily
+    // spends are the only debits that touch it — the daily pool drains first.
+    let longSpent = 0
+    for (const row of rows) {
+      if (asText(row.consumeSource) === "daily") continue
+      if (asText(row.direction) !== "debit") continue
+      longSpent += asNumber(row.pointsActual) ?? 0
+    }
+    snapshot.longSpent = longSpent
+    if (total !== undefined && rows.length >= total && snapshot.balance !== undefined) {
+      snapshot.longEarned = snapshot.balance + longSpent
     }
     const cycle = snapshot.cycleDate
     if (!covered || cycle === undefined) {

@@ -175,21 +175,25 @@ export default async function loomyConnect(pi: ExtensionAPI): Promise<void> {
  * The points line for the refresh notice.
  *
  * Loomy keeps two pools: a **daily** one (the platform's free allowance,
- * refilled every day) and a **long-term** one (earned from tasks, or topped up
- * by a reset, with no ceiling). Only the daily pool has a total, so only it
- * gets a ratio; the long-term pool is reported as an amount.
+ * refilled every day) and a **long-term** one (earned from tasks or a reset,
+ * with no ceiling). Neither publishes a total, so both ratios are against what
+ * the account's own ledger says the pool has held — each shown only when the
+ * rows it needs were read.
  */
 function describePoints(account: LoomyAccountSnapshot): string {
   if (account.available === undefined) return ""
   const parts = [`剩余 ${account.available} 分`]
-  if (account.dailyBalance !== undefined || account.balance !== undefined) {
-    const daily = account.dailyBalance === undefined ? "?" : `${account.dailyBalance}`
-    const long = account.balance === undefined ? "?" : `${account.balance}`
-    parts.push(`每日 ${daily} + 长期 ${long}`)
+  if (account.dailyBalance !== undefined && account.grant !== undefined && account.grant > 0) {
+    const used = account.consumed ?? account.grant - account.dailyBalance
+    parts.push(`每日 ${account.dailyBalance}/${account.grant}（${Math.round((used / account.grant) * 100)}%）`)
+  } else if (account.dailyBalance !== undefined) {
+    parts.push(`每日 ${account.dailyBalance}`)
   }
-  if (account.grant !== undefined && account.consumed !== undefined && account.grant > 0) {
-    const percent = Math.round((account.consumed / account.grant) * 100)
-    parts.push(`今日已用 ${account.consumed}/${account.grant}（${percent}%）`)
+  if (account.balance !== undefined && account.longEarned !== undefined && account.longEarned > 0) {
+    const spent = account.longSpent ?? account.longEarned - account.balance
+    parts.push(`长期 ${account.balance}/${account.longEarned}（${Math.round((spent / account.longEarned) * 100)}%）`)
+  } else if (account.balance !== undefined) {
+    parts.push(`长期 ${account.balance}`)
   }
   return `，${parts.join("，")}`
 }

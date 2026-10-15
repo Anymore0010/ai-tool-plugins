@@ -28,9 +28,17 @@ GET https://one.iflytek.com/kooky-api/api/client/v3/cli/config
 → 401 {"detail":"Token tid required"}
 ```
 
-已排除的可能：`token` / `bk_token` / `tid` / `X-Tenant-Id` / `tenantId` / `domain` / `clientType` 等各种请求头组合**都不能**满足它（逐一实测），且桌面端自己的 `cli/config` 调用只发 `Authorization: Bearer`。也就是说 **`tid` 是令牌本身必须携带的声明**，而现存令牌没有该声明。
+已排除的可能：`token` / `bk_token` / `tid` / `X-Tenant-Id` / `tenantId` / `domain` / `clientType` 等请求头组合**都不能**满足它（逐一实测），且桌面端自己的 `cli/config` 调用只发 `Authorization: Bearer`。也就是说 **`tid` 是令牌本身必须携带的声明**，而现存令牌没有该声明。
+
+补充实测（同日）：**整个 `/kooky-api` 面都这样** —— `/kooky-api/api/models`、`/kooky-api/api/client/v1/ai-tool-platform` 等一律 `401 Token tid required`，加 `?tid=…` 查询参数同样无效；另一条 `client-config` 面则要 SSO cookie（`未提供 SSO token`）。
+
+**这对额度显示的影响**：WingWork 的月度额度（每月 $20）只能从这些面读，因此**当前无法显示额度**。本插件的 `usage` 钩子会在能读到时给出额度窗口，现在会返回一条明确的错误说明而不是空白。等桌面端重新登录、`/kooky-api` 面恢复后即可用。
 
 这**不是本插件引入的问题**：本仓库的 omp 插件 [`omp-wingwork-connect`](../omp-wingwork-connect) 现在报同样的错（它会把网关的原话带回给 omp）。
+
+### 顺带修好的一件事：令牌读取
+
+排查期间发现桌面端把 `Local Storage` 压缩成了 `.ldb` 表文件（15:43 发生一次 compaction），旧的读取器只认未压缩的写前日志，于是**读不到令牌**。现在两个插件都按 LevelDB 表格式解析（footer → index block → data block，含 Snappy 解压），实测已能从压缩后的 `000003.ldb` 读出 866 字符的账号 JWT。
 
 **修复方式**：在 iKooky（WingWork）桌面端**重新登录一次**（让桌面端重新签发一份带 `tid` 的令牌），然后：
 
@@ -40,6 +48,24 @@ magpie provider test wingwork
 ```
 
 如果重新登录后仍然报 `Token tid required`，说明新令牌同样不带该声明，那就是客户端版本落后于服务端——需要等桌面端更新。
+
+## 额度（每月额度）
+
+WingWork 的额度是**每月 $20 一档**（`quota.total`），桌面端设置页读的是：
+
+```
+GET {origin}/kooky-api/api/client/v1/provider-config/providers/kooky?channel=all
+  Authorization: Bearer <账号 JWT>
+  X-KC-Account: <账号名>
+→ data.quota = { balance, used, total, used_percent, fixed_quota,
+                 quota_type, reset_date, short_term_temp_quota }
+```
+
+本插件的 `usage` 钩子就用它，把 `used_percent` 映射成 `每月额度` 进度条（`$已用 / $总额`，带 `reset_date`）。
+
+⚠️ 但**当前读不到**：这个接口属于 `/kooky-api` 面，与换取令牌那一步一样回 `401 Token tid required`。此时额度卡显示的是这条原因，而不是空白。等桌面端重新登录、该面恢复后即自动显示。
+
+> 本轮按你的要求**没有**做模型连通性测试（本月额度已用尽）。
 
 ## 安装
 

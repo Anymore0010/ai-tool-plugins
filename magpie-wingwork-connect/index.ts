@@ -52,8 +52,16 @@ const USER_INFO_KEY = "super-assistant-userInfo"
 const GATEWAY_USER_AGENT = "WingWork"
 /** Exchange path that mints the inference key. */
 const CLI_CONFIG_PATH = "/kooky-api/api/client/v3/cli/config"
+/** The provider-config surface: models, quota and enablements per provider. */
+const PROVIDER_CONFIG_PATH = "/kooky-api/api/client/v1/provider-config"
 /** Cap on how much of a LevelDB file is scanned; the store can be large. */
 const MAX_SCAN_BYTES = 64 * 1024 * 1024
+
+/** LevelDB's table footer: two block handles, padding, then the magic. */
+const LEVELDB_FOOTER_SIZE = 48
+/** Little-endian `0xdb4775248b80fb57`, which ends every table file. */
+const LEVELDB_TABLE_MAGIC = "57fb808b247547db"
+
 /**
  * Cold discovery must answer inside magpie's model-list budget, and the
  * exchange is one small GET.
@@ -151,6 +159,15 @@ function asText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined
 }
 
+/** Number, or a numeric string; anything else (including `null`) is `undefined`. */
+function asNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined
+  const text = asText(value)
+  if (text === undefined) return undefined
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 /** Parse JSON without throwing; `undefined` for anything that is not JSON. */
 function safeParse(text: string): unknown {
   try {
@@ -240,22 +257,83 @@ function decodeCandidates(slice: Buffer): { accessToken: string; user?: string }
 }
 
 /**
- * Pull the account document out of one LevelDB file.
+ * Raw Snappy, as LevelDB stores compressed table blocks.
  *
- * A write-ahead log stores `localStorage` records as UTF-16 value bytes after
- * the ASCII key, so the precise read is: find the key, read its value-length
- * varint, slice. After a compaction the record lands in an `.sst`/`.ldb` file
- * whose values may be compressed; that case is covered only by the plain byte
- * scan and can legitimately come up empty.
+ * Chromium compacts its `localStorage` store into `.ldb`/`.sst` files whose
+ * data blocks are Snappy-compressed, which is why the account document can be
+ * present yet invisible to a plain byte scan. This is the raw format (not the
+ * framed one): a varint of the output length, then literals and copies.
  */
-function readTokenFromFile(path: string): { accessToken: string; user?: string } | undefined {
-  let buffer: Buffer
-  try {
-    if (statSync(path).size > MAX_SCAN_BYTES) return undefined
-    buffer = readFileSync(path)
-  } catch {
-    return undefined
+function snappyUncompress(input: Buffer): Buffer | undefined {
+  let pos = 0
+  let length = 0
+  let shift = 0
+  for (;;) {
+    const byte = input[pos++]
+    if (byte === undefined) return undefined
+    length += (byte & 0x7f) << shift
+    if ((byte & 0x80) === 0) break
+    shift += 7
+    if (shift > 28) return undefined
   }
+  if (length === 0) return Buffer.alloc(0)
+  const out = Buffer.alloc(length)
+  let written = 0
+  while (pos < input.length && written < length) {
+    const tag = input[pos++]
+    if (tag === undefined) return undefined
+    const kind = tag & 3
+    if (kind === 0) {
+      let literal = tag >> 2
+      if (literal >= 60) {
+        const extra = literal - 59
+        literal = 0
+        for (let index = 0; index < extra; index++) {
+          const byte = input[pos + index]
+          if (byte === undefined) return undefined
+          literal |= byte << (8 * index)
+        }
+        pos += extra
+      }
+      literal += 1
+      if (pos + literal > input.length || written + literal > length) return undefined
+      input.copy(out, written, pos, pos + literal)
+      pos += literal
+      written += literal
+      continue
+    }
+    let copyLength: number
+    let offset: number
+    if (kind === 1) {
+      copyLength = 4 + ((tag >> 2) & 7)
+      const next = input[pos++]
+      if (next === undefined) return undefined
+      offset = ((tag >> 5) << 8) | next
+    } else if (kind === 2) {
+      copyLength = 1 + (tag >> 2)
+      const low = input[pos]
+      const high = input[pos + 1]
+      if (low === undefined || high === undefined) return undefined
+      offset = low | (high << 8)
+      pos += 2
+    } else {
+      copyLength = 1 + (tag >> 2)
+      const bytes = input.subarray(pos, pos + 4)
+      if (bytes.length < 4) return undefined
+      offset = bytes[0]! | (bytes[1]! << 8) | (bytes[2]! << 16) | (bytes[3]! << 24)
+      pos += 4
+    }
+    if (offset === 0 || offset > written || written + copyLength > length) return undefined
+    for (let index = 0; index < copyLength; index++) {
+      out[written] = out[written - offset]!
+      written++
+    }
+  }
+  return written === length ? out : undefined
+}
+
+/** Find the account document anywhere in a byte range and decode it. */
+function scanForAccount(buffer: Buffer): { accessToken: string; user?: string } | undefined {
   const marker = Buffer.from(USER_INFO_KEY, "latin1")
   let searchFrom = 0
   for (;;) {
@@ -272,11 +350,97 @@ function readTokenFromFile(path: string): { accessToken: string; user?: string }
         if (decoded !== undefined) return decoded
       }
     }
-    // Fallback for records whose framing cannot be parsed (compacted stores).
+    // Fallback for records whose framing cannot be parsed.
     const window = buffer.subarray(at + marker.length, at + marker.length + 4 * 1024 * 1024)
     const decoded = decodeCandidates(window)
     if (decoded !== undefined) return decoded
   }
+}
+
+/**
+ * Pull the account document out of one LevelDB file.
+ *
+ * Two layouts hold it:
+ * - A **write-ahead log** keeps `localStorage` records as UTF-16 value bytes
+ *   after the ASCII key, so the precise read is: find the key, read its
+ *   value-length varint, slice.
+ * - A **table** (`.ldb`/`.sst`), which is what a compaction leaves behind,
+ *   keeps the same records inside data blocks, whose payload is usually
+ *   Snappy-compressed. Such a file is a proper table: a 48-byte footer names
+ *   the index block, the index names every data block, and each block ends
+ *   with a one-byte compression type and a CRC. Compressed blocks are shorter
+ *   than the 4 KiB they hold, so blocks cannot be found by walking fixed
+ *   strides — the chain is followed instead.
+ */
+function readTokenFromFile(path: string): { accessToken: string; user?: string } | undefined {
+  let buffer: Buffer
+  try {
+    if (statSync(path).size > MAX_SCAN_BYTES) return undefined
+    buffer = readFileSync(path)
+  } catch {
+    return undefined
+  }
+  const fromLog = scanForAccount(buffer)
+  if (fromLog !== undefined) return fromLog
+  return readTable(buffer)
+}
+
+/** A block's payload, decompressed according to its trailer. */
+function blockPayload(file: Buffer, offset: number, size: number): Buffer | undefined {
+  if (size <= 0 || offset < 0 || offset + size + 5 > file.length) return undefined
+  const compression = file[offset + size]
+  const raw = file.subarray(offset, offset + size)
+  if (compression === 0) return raw
+  return compression === 1 ? snappyUncompress(raw) : undefined
+}
+
+/** Read a block handle: `offset` then `size`, both varints. */
+function readBlockHandle(buffer: Buffer, pos: number): { offset: number; size: number; bytes: number } | undefined {
+  const offset = readVarint(buffer, pos)
+  if (offset === undefined) return undefined
+  const size = readVarint(buffer, pos + offset.bytes)
+  if (size === undefined) return undefined
+  return { offset: offset.value, size: size.value, bytes: offset.bytes + size.bytes }
+}
+
+/**
+ * Walk a LevelDB table: footer → index block → every data block.
+ *
+ * The footer's last eight bytes are the table magic, which is what tells this
+ * layout apart from a write-ahead log that happens to be the same size.
+ */
+function readTable(buffer: Buffer): { accessToken: string; user?: string } | undefined {
+  if (buffer.length < LEVELDB_FOOTER_SIZE) return undefined
+  const footer = buffer.subarray(buffer.length - LEVELDB_FOOTER_SIZE)
+  if (footer.subarray(LEVELDB_FOOTER_SIZE - 8).toString("hex") !== LEVELDB_TABLE_MAGIC) return undefined
+  const metaindex = readBlockHandle(footer, 0)
+  if (metaindex === undefined) return undefined
+  const index = readBlockHandle(footer, metaindex.bytes)
+  if (index === undefined) return undefined
+  const indexBlock = blockPayload(buffer, index.offset, index.size)
+  if (indexBlock === undefined) return undefined
+  let pos = 0
+  while (pos < indexBlock.length) {
+    const shared = readVarint(indexBlock, pos)
+    if (shared === undefined) break
+    pos += shared.bytes
+    const nonShared = readVarint(indexBlock, pos)
+    if (nonShared === undefined) break
+    pos += nonShared.bytes
+    const valueLength = readVarint(indexBlock, pos)
+    if (valueLength === undefined) break
+    pos += valueLength.bytes
+    pos += nonShared.value
+    const value = indexBlock.subarray(pos, pos + valueLength.value)
+    pos += valueLength.value
+    const handle = readBlockHandle(value, 0)
+    if (handle === undefined) continue
+    const block = blockPayload(buffer, handle.offset, handle.size)
+    if (block === undefined) continue
+    const found = scanForAccount(block)
+    if (found !== undefined) return found
+  }
+  return undefined
 }
 
 /**
@@ -427,6 +591,16 @@ function currentOrThrow(auth: StoredAuth): { token: string; user?: string; sourc
   const read = readDesktopToken()
   if ("error" in read) throw new Error(read.error)
   return read
+}
+
+/**
+ * The account name the desktop app puts in `X-KC-Account`: the signed-in
+ * account's own id, which the token carries as `sub` (the app's account
+ * document calls the same value `userId`).
+ */
+function accountNameOf(token: string): string | undefined {
+  const payload = asRecord(safeParse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")))
+  return asText(payload?.sub) ?? asText(payload?.userId) ?? asText(payload?.username)
 }
 
 // -- wire shaping --------------------------------------------------------------
@@ -665,6 +839,75 @@ export const WingWorkAuthPlugin = async () => ({
           }
           return response
         },
+      }
+    },
+    /**
+     * The plan's monthly allowance.
+     *
+     * WingWork publishes it on the provider-config surface the desktop app's
+     * own settings page reads, as `quota`:
+     *
+     *   `{ balance, used, total, used_percent, fixed_quota, quota_type,
+     *      reset_date, short_term_temp_quota }` — amounts in dollars per month.
+     *
+     * The `X-KC-Account` header carries the account name the app puts there.
+     * Since 2026-10 the whole `/kooky-api` surface answers `Token tid required`
+     * to tokens minted before that change, so this reports the platform's own
+     * words rather than a blank card; a re-login in the desktop app mints a
+     * token the surface accepts and the card fills in.
+     */
+    async usage(getAuth: () => Promise<StoredAuth | undefined>) {
+      const auth = await getAuth()
+      if (auth?.source !== "desktop") return { error: "not signed in", signIn: "kept" }
+      try {
+        const { token } = currentOrThrow(auth)
+        const account = accountNameOf(token)
+        const response = await fetch(`${resolveOrigin()}${PROVIDER_CONFIG_PATH}/providers/kooky?channel=all`, {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": GATEWAY_USER_AGENT,
+            Authorization: `Bearer ${token}`,
+            ...(account === undefined ? {} : { "X-KC-Account": account }),
+          },
+          signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
+        })
+        const payload: unknown = await response.json().catch(() => undefined)
+        if (!response.ok) {
+          const record = asRecord(payload)
+          const detail = record === undefined ? undefined : (asText(record.detail) ?? asText(record.message))
+          return {
+            error: `${detail ?? `HTTP ${response.status}`}（额度接口与 /kooky-api 其余部分一样要求带 tid 的令牌；在 iKooky 桌面端重新登录后再试）`,
+            // The refusal says nothing about the account's sign-in state.
+            signIn: "kept",
+          }
+        }
+        const quota = asRecord(asRecord(asRecord(payload)?.data)?.quota)
+        if (quota === undefined) return { error: "the gateway answered no quota", signIn: "kept" }
+        const total = asNumber(quota.total)
+        const used = asNumber(quota.used)
+        const percent =
+          asNumber(quota.used_percent) ?? (total === undefined || total <= 0 ? undefined : ((used ?? 0) / total) * 100)
+        const reset = asText(quota.reset_date)
+        const kind = asText(quota.quota_type)
+        return {
+          plan: kind === undefined || kind === "free" ? "WingWork" : kind,
+          balance:
+            total === undefined ? undefined : `$${(total - (used ?? 0)).toFixed(2)} / $${total.toFixed(2)}`,
+          windows:
+            percent === undefined
+              ? []
+              : [
+                  {
+                    name: "每月额度",
+                    used: percent,
+                    ...(total === undefined ? {} : { display: `$${(used ?? 0).toFixed(2)} / $${total.toFixed(2)}` }),
+                    ...(reset === undefined ? {} : { resetsAt: reset }),
+                  },
+                ],
+          signIn: "kept",
+        }
+      } catch (error: unknown) {
+        return { error: error instanceof Error ? error.message : String(error), signIn: "kept" }
       }
     },
   },

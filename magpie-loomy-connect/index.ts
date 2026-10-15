@@ -281,20 +281,41 @@ function randomHex(bytes: number): string {
  * the walk).
  */
 interface PointsSnapshot {
+  /** The long-term pool as it stands. */
   balance?: number
+  /** Today's pool as it stands. */
   dailyBalance?: number
+  /** The two pools together: what a request may spend. */
   available?: number
-  /** Net points taken out of today's bucket (credits count negative). */
+  /** Net points taken out of today's pool (credits count negative). */
   consumed?: number
-  /** What today's bucket started with; derived, not published. */
+  /** What today's pool started with; derived, not published. */
   grant?: number
+  /** Net points ever taken out of the long-term pool. */
+  longSpent?: number
+  /**
+   * Everything ever credited into the long-term pool: what is left plus what
+   * was spent out of it. Only set when the whole ledger was read, because a
+   * partial read would put a wrong denominator under the bar.
+   */
+  longEarned?: number
   cycleDate?: string
 }
 
 const LEDGER_PAGE_SIZE = 100
-/** How many ledger pages one day's usage may span before it is left unread. */
+/** How many ledger pages the walk may span before it gives up. */
 const LEDGER_MAX_PAGES = 10
 
+/**
+ * Read the account's two point pools and what has been spent from each.
+ *
+ * The platform publishes no total for either pool, but the ledger supplies
+ * both. Records are newest-first and carry their cycle date, so today's pool
+ * started at `dailyBalance + consumedToday`; the long-term pool has held
+ * `balance + spentFromIt` since it began. Coverage is what keeps that honest:
+ * today's pool needs every record of the newest cycle, and the long-term pool
+ * needs the whole ledger, so each is derived only from rows actually read.
+ */
 async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
   const rows: Record<string, unknown>[] = []
   const snapshot: PointsSnapshot = {}
@@ -317,7 +338,6 @@ async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
       snapshot.balance = asNumber(data.balance)
       snapshot.dailyBalance = asNumber(data.dailyBalance)
       snapshot.available = asNumber(data.availableBalance)
-      snapshot.cycleDate = undefined
     }
     const list = Array.isArray(data.list) ? data.list : []
     total = asNumber(data.total) ?? total
@@ -325,30 +345,41 @@ async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
       const row = asRecord(entry)
       if (row !== undefined) rows.push(row)
     }
-    const lastCycle = asText(rows[rows.length - 1]?.dailyCycleDate)
     if (rows.length === 0) {
       covered = true
       break
     }
-    if (snapshot.cycleDate === undefined) snapshot.cycleDate = asText(rows[0]?.dailyCycleDate)
-    // Rows are newest-first, so once a record from an older cycle is in hand,
-    // the newest cycle is complete.
+    snapshot.cycleDate ??= asText(rows[0]?.dailyCycleDate)
+    // Rows are newest-first, so a short page, the end of the ledger, or a row
+    // from an older cycle all mean the newest cycle is fully in hand.
     if (list.length < LEDGER_PAGE_SIZE || (total !== undefined && rows.length >= total)) {
       covered = true
       break
     }
+    const lastCycle = asText(rows[rows.length - 1]?.dailyCycleDate)
     if (lastCycle !== undefined && lastCycle !== snapshot.cycleDate) {
       covered = true
       break
     }
   }
-  if (!covered) return snapshot
+  // Long-term pool: what it holds plus everything spent out of it. Non-daily
+  // spends are the only debits that touch it — the daily pool is drained first.
+  let longSpent = 0
+  for (const row of rows) {
+    if (asText(row.consumeSource) === "daily") continue
+    if (asText(row.direction) !== "debit") continue
+    longSpent += asNumber(row.pointsActual) ?? 0
+  }
+  snapshot.longSpent = longSpent
+  if (total !== undefined && rows.length >= total && snapshot.balance !== undefined) {
+    snapshot.longEarned = snapshot.balance + longSpent
+  }
   const cycle = snapshot.cycleDate
-  if (cycle === undefined) return snapshot
+  if (!covered || cycle === undefined) return snapshot
   let consumed = 0
   for (const row of rows) {
     if (asText(row.dailyCycleDate) !== cycle) continue
-    // Only the daily bucket is being measured; the long-term pool is separate.
+    // Only today's pool is measured here; the long-term one is separate.
     if (asText(row.consumeSource) !== "daily") continue
     const points = asNumber(row.pointsActual) ?? 0
     consumed += asText(row.direction) === "credit" ? -points : points
@@ -361,7 +392,7 @@ async function pointsSnapshot(credential: Credential): Promise<PointsSnapshot> {
 }
 
 /**
- * When the daily bucket refills: the next local midnight after the cycle date
+ * When the daily pool refills: the next local midnight after the cycle date
  * the ledger reports. The platform states the cycle as a calendar date, which
  * is the only boundary it ever names.
  */
@@ -639,33 +670,40 @@ export const LoomyAuthPlugin = async () => ({
         // `/api/v1/points/records` is the only balance a personal account has:
         // `team-points/balance` answers "not switched to a team" for it, and
         // this envelope carries both buckets — the long-term one (`balance`)
-        // and today's (`dailyBalance`).
+        // Neither pool publishes a total, so both denominators come from the
+        // ledger: today's pool started at what is left plus what was spent out
+        // of it today, and the long-term pool has held what is left plus what
+        // was spent out of it since it began. The daily one falls back to the
+        // platform's allowance when today's rows could not all be read; the
+        // long-term one is simply left out unless the whole ledger was read,
+        // because a partial read would put a wrong denominator under its bar.
         const points = await pointsSnapshot(credential)
-        // The daily pool's total is never published, so it is taken from the
-        // ledger (what is left plus what was spent out of it today) and falls
-        // back to the platform's own daily allowance when today's rows could
-        // not all be read. Either way the bar describes *today*, and the
-        // long-term pool — fed by tasks and resets, with no ceiling — is
-        // spelled out beside it rather than drawn as a share of nothing.
         const spendable = points.dailyBalance
-        const consumed =
-          points.consumed ?? (spendable === undefined ? undefined : DAILY_ALLOWANCE - spendable)
+        const consumed = points.consumed ?? (spendable === undefined ? undefined : DAILY_ALLOWANCE - spendable)
         const grant = points.grant ?? DAILY_ALLOWANCE
-        const long = points.balance
-        const windows =
-          spendable === undefined || consumed === undefined || grant <= 0
+        const resetsAt = nextCycleStart(points.cycleDate)
+        const windows = [
+          ...(spendable === undefined || consumed === undefined || grant <= 0
             ? []
             : [
                 {
                   name: "每日积分",
                   used: (consumed / grant) * 100,
-                  display: `${spendable} / ${grant} 分${long === undefined ? "" : ` · 长期 ${long}`}`,
-                  ...(nextCycleStart(points.cycleDate) === undefined
-                    ? {}
-                    : { resetsAt: nextCycleStart(points.cycleDate) }),
+                  display: `${spendable} / ${grant} 分`,
+                  ...(resetsAt === undefined ? {} : { resetsAt }),
                   span: 86_400,
                 },
-              ]
+              ]),
+          ...(points.longEarned === undefined || points.longSpent === undefined || points.longEarned <= 0
+            ? []
+            : [
+                {
+                  name: "长期积分",
+                  used: (points.longSpent / points.longEarned) * 100,
+                  display: `${points.balance} / ${points.longEarned} 分`,
+                },
+              ]),
+        ]
         return {
           plan: "Loomy",
           balance: points.available === undefined ? undefined : `${points.available} 分`,

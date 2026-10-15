@@ -25,9 +25,9 @@ Loomy 没有推理 API Key：登录讯飞账号后拿到的 **账号 session 令
 | 模型名册 | `GET /models` 带 `protocol` / `context_length` / `max_output_tokens` / `reasoning_efforts` / `default_reasoning_effort` / `capabilities` | 全量映射到模型配置（上限、推理档位、图片输入、工具调用） |
 | 模型类型 | `type` 分 `chat` 与 `image`；生图模型不是对话模型 | 只暴露 `chat` |
 | 点数倍率 | **印在显示名里**（`DeepSeek V4.1 Flash(x2.0)`、`（x0.8）`），`x0.0` 为限时免费 | 解析为 magpie 的 `rate`（模型选择器会显示）；`x0.0` 标为 `free` |
-| 点数模型 | **两个池子**：**每日积分**（平台每天赠送 **5000** 分，按 `dailyCycleDate` 每日重置）与**长期积分**（做任务或「重置」获得，无上限）。可用总额 = 两者之和 | 额度卡片把每日积分画成进度条、把长期积分写在旁边 |
+| 点数模型 | **两个池子**：**每日积分**（平台每天赠送 **5000** 分，按 `dailyCycleDate` 每日重置）与**长期积分**（做任务或「重置」获得，无上限）。可用总额 = 两者之和 | 额度卡片把**两个池子都画成进度条**（见下） |
 | 点数结构 | 个人账号**没有**独立余额接口（`team-points/balance` 回 `当前未切换到团队`），但 `GET /api/v1/points/records?...&recordType=all` 同时给出两个桶：`balance`（长期池）、`dailyBalance`（**每日池**）、`availableBalance`（两者之和）；每条记录带 `dailyCycleDate` 与 `consumeSource` | 额度卡片用这个接口 |
-| 每日额度总量 | **不发布**（`dailyLimitPoints` 那一族字段服务端从不返回） | 优先用账本反推：`grant = dailyBalance + 今日 daily 净消耗`（本机实测 `4962 + 38 = 5000`，整数自证）；读不全时回退到平台常量 5000 |
+| 两个池子的总量 | **都不发布**（`dailyLimitPoints` 那一族字段服务端从不返回） | 都用账本反推：每日 `grant = dailyBalance + 今日 daily 净消耗`（实测 `4962 + 38 = 5000` 整数自证）；长期 `longEarned = balance + 从长期池的累计扣减`。读不全时每日回退平台常量 5000，长期整个不显示比例（不给假分母） |
 | 点数服务基址 | 桌面端 `points-config.json` 里存的可能是**另一个环境**（会拒绝当前登录态） | 默认取推理同源（可用 `LOOMY_POINTS_BASE` 覆盖） |
 | 思考开关 | `enable_thinking` 与 `reasoning_effort` 都接受 | 名册的 `reasoning_efforts` → magpie variants（`reasoningEffort`） |
 
@@ -38,7 +38,7 @@ magpie plugin add /path/to/omp-plugins/magpie-loomy-connect
 magpie plugin login loomy            # 只有一个方式：用桌面端的登录态
 magpie plugin                        # loomy (Loomy, N models)  signed in as <手机号>
 magpie provider test loomy           # 每个 API 发一个很小的请求
-magpie quota                         # loomy · Loomy · <点数> 分 left
+magpie quota                         # 两条进度条：每日 4962/5000 分（1%）、长期 10500/10500 分（0%）
 ```
 
 装好后 agent 就能用 `loomy/<model>`，和其它供应商的模型一样。

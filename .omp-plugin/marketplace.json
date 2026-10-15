@@ -27,7 +27,7 @@
     {
       "name": "omp-wingwork-connect",
       "source": "./omp-wingwork-connect",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "把 iKooky（WingWork）桌面版账号的模型接入 omp（零配置复用桌面端登录态）。",
       "license": "MIT",
       "category": "provider"
@@ -43,7 +43,7 @@
     {
       "name": "omp-loomy-connect",
       "source": "./omp-loomy-connect",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "把 Loomy 桌面版账号的模型接入 omp（零配置复用桌面端登录态）。",
       "license": "MIT",
       "category": "provider"

@@ -29,9 +29,12 @@ export const WINGWORK_USER_DATA_ENV = "WINGWORK_USER_DATA"
 
 /** localStorage key holding the signed-in account document. */
 export const USER_INFO_KEY = "super-assistant-userInfo"
-
 /** Cap on how much of a LevelDB file is scanned (the store can be large). */
 const MAX_SCAN_BYTES = 64 * 1024 * 1024
+/** LevelDB's table footer: two block handles, padding, then the magic. */
+const LEVELDB_FOOTER_SIZE = 48
+/** Little-endian `0xdb4775248b80fb57`, which ends every table file. */
+const LEVELDB_TABLE_MAGIC = "57fb808b247547db"
 
 export interface WingWorkCredential {
   /** One-platform JWT used as `Authorization: Bearer` on the kooky-api surface. */
@@ -139,23 +142,8 @@ function decodeCandidates(slice: Buffer): WingWorkCredential | undefined {
   return parseUserInfo(swapped.toString("utf16le"))
 }
 
-/**
- * Pull the account document out of one LevelDB file.
- *
- * A write-ahead log stores `localStorage` records as UTF-16 value bytes after
- * the ASCII key, so the precise read is: find the key, read its value-length
- * varint, slice. After a compaction the record lands in an `.sst`/`.ldb` file,
- * where the values may also be Snappy-compressed; that case is covered only by
- * the plain byte scan and can legitimately come up empty.
- */
-function readTokenFromFile(path: string): WingWorkCredential | undefined {
-  let buffer: Buffer
-  try {
-    if (statSync(path).size > MAX_SCAN_BYTES) return undefined
-    buffer = readFileSync(path)
-  } catch {
-    return undefined
-  }
+/** Find the account document anywhere in a byte range and decode it. */
+function scanForAccount(buffer: Buffer): WingWorkCredential | undefined {
   const marker = Buffer.from(USER_INFO_KEY, "latin1")
   let searchFrom = 0
   for (;;) {
@@ -172,11 +160,174 @@ function readTokenFromFile(path: string): WingWorkCredential | undefined {
         if (decoded !== undefined) return decoded
       }
     }
-    // Fallback for records whose framing we cannot parse (compacted stores).
+    // Fallback for records whose framing we cannot parse.
     const window = buffer.subarray(at + marker.length, at + marker.length + 4 * 1024 * 1024)
     const decoded = decodeCandidates(window)
     if (decoded !== undefined) return decoded
   }
+}
+
+/**
+ * Raw Snappy, as LevelDB stores compressed table blocks.
+ *
+ * Chromium compacts its `localStorage` store into `.ldb`/`.sst` files whose
+ * data blocks are Snappy-compressed, which is why the account document can be
+ * present yet invisible to a plain byte scan. This is the raw format (not the
+ * framed one): a varint of the output length, then literals and copies.
+ */
+function snappyUncompress(input: Buffer): Buffer | undefined {
+  let pos = 0
+  let length = 0
+  let shift = 0
+  for (;;) {
+    const byte = input[pos++]
+    if (byte === undefined) return undefined
+    length += (byte & 0x7f) << shift
+    if ((byte & 0x80) === 0) break
+    shift += 7
+    if (shift > 28) return undefined
+  }
+  if (length === 0) return Buffer.alloc(0)
+  const out = Buffer.alloc(length)
+  let written = 0
+  while (pos < input.length && written < length) {
+    const tag = input[pos++]
+    if (tag === undefined) return undefined
+    const kind = tag & 3
+    if (kind === 0) {
+      let literal = tag >> 2
+      if (literal >= 60) {
+        const extra = literal - 59
+        literal = 0
+        for (let index = 0; index < extra; index++) {
+          const byte = input[pos + index]
+          if (byte === undefined) return undefined
+          literal |= byte << (8 * index)
+        }
+        pos += extra
+      }
+      literal += 1
+      if (pos + literal > input.length || written + literal > length) return undefined
+      input.copy(out, written, pos, pos + literal)
+      pos += literal
+      written += literal
+      continue
+    }
+    let copyLength: number
+    let offset: number
+    if (kind === 1) {
+      copyLength = 4 + ((tag >> 2) & 7)
+      const next = input[pos++]
+      if (next === undefined) return undefined
+      offset = ((tag >> 5) << 8) | next
+    } else if (kind === 2) {
+      copyLength = 1 + (tag >> 2)
+      const low = input[pos]
+      const high = input[pos + 1]
+      if (low === undefined || high === undefined) return undefined
+      offset = low | (high << 8)
+      pos += 2
+    } else {
+      copyLength = 1 + (tag >> 2)
+      const bytes = input.subarray(pos, pos + 4)
+      if (bytes.length < 4) return undefined
+      offset = bytes[0]! | (bytes[1]! << 8) | (bytes[2]! << 16) | (bytes[3]! << 24)
+      pos += 4
+    }
+    if (offset === 0 || offset > written || written + copyLength > length) return undefined
+    for (let index = 0; index < copyLength; index++) {
+      out[written] = out[written - offset]!
+      written++
+    }
+  }
+  return written === length ? out : undefined
+}
+
+/** A block's payload, decompressed according to its trailer. */
+function blockPayload(file: Buffer, offset: number, size: number): Buffer | undefined {
+  if (size <= 0 || offset < 0 || offset + size + 5 > file.length) return undefined
+  const compression = file[offset + size]
+  const raw = file.subarray(offset, offset + size)
+  if (compression === 0) return raw
+  return compression === 1 ? snappyUncompress(raw) : undefined
+}
+
+/** Read a block handle: `offset` then `size`, both varints. */
+function readBlockHandle(buffer: Buffer, pos: number): { offset: number; size: number; bytes: number } | undefined {
+  const offset = readVarint(buffer, pos)
+  if (offset === undefined) return undefined
+  const size = readVarint(buffer, pos + offset.bytes)
+  if (size === undefined) return undefined
+  return { offset: offset.value, size: size.value, bytes: offset.bytes + size.bytes }
+}
+
+/**
+ * Walk a LevelDB table: footer → index block → every data block.
+ *
+ * The footer's last eight bytes are the table magic, which is what tells this
+ * layout apart from a write-ahead log that happens to be the same size.
+ */
+function readTable(buffer: Buffer): WingWorkCredential | undefined {
+  if (buffer.length < LEVELDB_FOOTER_SIZE) return undefined
+  const footer = buffer.subarray(buffer.length - LEVELDB_FOOTER_SIZE)
+  if (footer.subarray(LEVELDB_FOOTER_SIZE - 8).toString("hex") !== LEVELDB_TABLE_MAGIC) return undefined
+  const metaindex = readBlockHandle(footer, 0)
+  if (metaindex === undefined) return undefined
+  const index = readBlockHandle(footer, metaindex.bytes)
+  if (index === undefined) return undefined
+  const indexBlock = blockPayload(buffer, index.offset, index.size)
+  if (indexBlock === undefined) return undefined
+  let pos = 0
+  while (pos < indexBlock.length) {
+    const shared = readVarint(indexBlock, pos)
+    if (shared === undefined) break
+    pos += shared.bytes
+    const nonShared = readVarint(indexBlock, pos)
+    if (nonShared === undefined) break
+    pos += nonShared.bytes
+    const valueLength = readVarint(indexBlock, pos)
+    if (valueLength === undefined) break
+    pos += valueLength.bytes
+    pos += nonShared.value
+    const value = indexBlock.subarray(pos, pos + valueLength.value)
+    pos += valueLength.value
+    const handle = readBlockHandle(value, 0)
+    if (handle === undefined) continue
+    const block = blockPayload(buffer, handle.offset, handle.size)
+    if (block === undefined) continue
+    const found = scanForAccount(block)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+/**
+ * Pull the account document out of one LevelDB file.
+ *
+ * Two layouts hold it:
+ *
+ * - A **write-ahead log** keeps `localStorage` records as UTF-16 value bytes
+ *   after the ASCII key, so the precise read is: find the key, read its
+ *   value-length varint, slice.
+ * - A **table** (`.ldb`/`.sst`), which is what a compaction leaves behind,
+ *   keeps the same records inside data blocks, whose payload is usually
+ *   Snappy-compressed. Such a file is a proper table: a 48-byte footer names
+ *   the index block, the index names every data block, and each block ends
+ *   with a one-byte compression type and a CRC. Compressed blocks are shorter
+ *   than the 4 KiB they hold, so blocks cannot be found by walking fixed
+ *   strides — the chain is followed instead.
+ */
+function readTokenFromFile(path: string): WingWorkCredential | undefined {
+  let buffer: Buffer
+  try {
+    if (statSync(path).size > MAX_SCAN_BYTES) return undefined
+    buffer = readFileSync(path)
+  } catch {
+    return undefined
+  }
+  const fromLog = scanForAccount(buffer)
+  if (fromLog !== undefined) return fromLog
+  return readTable(buffer)
 }
 
 /** The literal token override, if the operator set one. */
