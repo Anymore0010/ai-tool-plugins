@@ -1,6 +1,6 @@
 {
   "name": "magpie-wingwork-connect",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "magpie provider plugin for iKooky (WingWork): reuses the desktop app's sign-in, no API key needed.",
   "type": "module",
   "main": "./index.ts",
