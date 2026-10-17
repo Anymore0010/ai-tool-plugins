@@ -130,6 +130,12 @@ const cmp = (a, b) => {
 // restart omp), and the marketplace cache would otherwise silently shadow the
 // user's own checkout. Candidate configs are project then user, matching the
 // host's own precedence (project config shadows user config).
+//
+// Precedence: config.yml checkout > newest marketplace install > baked path.
+// The baked path is only a last resort: it names one file that may be a source
+// checkout (a working copy that an upgrade will never refresh) and must not
+// silently outrank the installed copy — that would make "no reinstall needed
+// after omp plugin upgrade" false.
 const configCandidates = [
   join(process.cwd(), ".omp", "config.yml"),
   join(HOME, ".omp", "agent", "config.yml"),
@@ -156,13 +162,8 @@ const fromConfig = configuredEntries
   .map(dir => join(dir, REL))
   .find(entry => existsSync(entry));
 
-// A baked path outside the marketplace cache is a source checkout the user
-// pointed at deliberately; a baked path inside the cache belongs to one
-// version directory that the next upgrade abandons.
-const bakedInCache = BAKED.startsWith(CACHE);
-const direct = fromConfig ?? (!bakedInCache && existsSync(BAKED) ? BAKED : undefined);
-if (direct) {
-  const child = Bun.spawn(["bun", direct, ...process.argv.slice(2)], { stdio: ["inherit", "inherit", "inherit"] });
+if (fromConfig) {
+  const child = Bun.spawn(["bun", fromConfig, ...process.argv.slice(2)], { stdio: ["inherit", "inherit", "inherit"] });
   process.exit(await child.exited);
 }
 const candidates = [];
@@ -175,7 +176,10 @@ try {
   }
 } catch {}
 candidates.sort((a, b) => cmp(b.v, a.v));
-const entry = candidates[0]?.entry ?? (existsSync(BAKED) ? BAKED : undefined);
+// The baked path is the last resort, and only when it is NOT a marketplace
+// cache copy (that one belongs to a version an upgrade abandons).
+const bakedUsable = !BAKED.startsWith(CACHE) && existsSync(BAKED);
+const entry = candidates[0]?.entry ?? (bakedUsable ? BAKED : undefined);
 if (entry === undefined) {
   console.error(NAME + ": 找不到插件安装位置（请先 omp plugin install omp-fast-update@ai-tool-plugins，或重跑 --install-cli）");
   process.exit(1);
