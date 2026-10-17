@@ -106,7 +106,8 @@ omp-fast-update --install-cli
 **本地克隆目录也一并改名**（文档里的开发路径已写成 `D:/Projects/ai-tool-plugins/...`）：
 
 ```bash
-# 在 omp 会话之外执行：正在运行的 omp 进程会把工作目录钉在旧路径上，Windows 会报 os error 32
+# 必须在「没有 omp 会话把该目录当工作目录」的终端里执行：
+# omp 进程的当前工作目录就是仓库根，Windows 会拒绝对它改名（os error 32）
 cd /d/Projects && mv omp-plugins ai-tool-plugins
 git -C ai-tool-plugins remote -v      # 应指向 ai-tool-plugins.git
 ```
