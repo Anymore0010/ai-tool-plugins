@@ -103,6 +103,14 @@ omp-fast-update --install-cli
 
 `omp-fast-update` 的 shim 自 v0.1.10 起按 `___omp-fast-update___` 匹配缓存目录，**不再绑定 marketplace 名**，所以改名后无需重装也能解析；重装只是把提示文案更新到新 marketplace 名。
 
+**本地克隆目录也一并改名**（文档里的开发路径已写成 `D:/Projects/ai-tool-plugins/...`）：
+
+```bash
+# 在 omp 会话之外执行：正在运行的 omp 进程会把工作目录钉在旧路径上，Windows 会报 os error 32
+cd /d/Projects && mv omp-plugins ai-tool-plugins
+git -C ai-tool-plugins remote -v      # 应指向 ai-tool-plugins.git
+```
+
 ## 两台机器（公司 / 个人）的安装、开发与发布流程
 
 omp 插件在机器上有**两种互斥的装载方式**。每个插件**同一时间只能选一种**，不要并存。
