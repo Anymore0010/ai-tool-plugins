@@ -36,7 +36,7 @@ AStudio 桌面端**不把推理密钥落盘**：它只保存登录时拿到的**
 
 ```bash
 # 本地目录
-magpie plugin add /path/to/omp-plugins/magpie-astudio-connect
+magpie plugin add /path/to/ai-tool-plugins/magpie/magpie-astudio-connect
 
 # 从 git（package.json 在仓库根目录时才适用；本 monorepo 用路径或 npm）
 magpie plugin add owner/repo
@@ -65,7 +65,7 @@ magpie quota                    # astudio · 体验版 · 积分 0% (1194 / 1200
 ```bash
 sb=$(mktemp -d)
 m() { env HOME=$sb XDG_CONFIG_HOME=$sb/.config XDG_CACHE_HOME=$sb/.cache MAGPIE_ADDR=127.0.0.1:3499 magpie "$@"; }
-m plugin add /path/to/omp-plugins/magpie-astudio-connect </dev/null
+m plugin add /path/to/ai-tool-plugins/magpie/magpie-astudio-connect </dev/null
 m plugin                          # 供应商、登录方式、模型、加载错误
 m plugin login astudio
 m provider test astudio           # 每个 API 一个最小请求
@@ -77,7 +77,7 @@ m quota                           # usage 钩子
 
 ## 与 omp 插件的关系
 
-本仓库另有 [`omp-astudio-connect`](../omp-astudio-connect)，把同一个账号接进 **omp**。两者互不依赖，可同时安装：
+本仓库另有 [`omp-astudio-connect`](../../omp/omp-astudio-connect)，把同一个账号接进 **omp**。两者互不依赖，可同时安装：
 
 - 都读同一份桌面登录态、都做同样的令牌换取；**令牌各自只在各自进程的内存里**。
 - 都可用；只是 omp 侧以 `astudio/*` 出现在 omp 的 `/model`，magpie 侧出现在 magpie 的供应商列表。

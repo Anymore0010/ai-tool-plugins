@@ -19,7 +19,7 @@ GET https://one.iflytek.com/kooky-api/api/client/v3/cli/config
 
 已排除的可能：`token` / `bk_token` / `tid` / `X-Tenant-Id` / `tenantId` / `domain` / `clientType` 等请求头组合**都不能**满足它（逐一实测），而桌面端自己的 `cli/config` 调用只发 `Authorization: Bearer` —— 也就是说 **`tid` 是令牌本身必须携带的声明**，而现存令牌没有该声明。这是**上游变更**，与插件无关。
 
-**修复方式**：在 iKooky（WingWork）桌面端**重新登录一次**，让桌面端重新签发令牌，然后重开会话即可。同样的报错也会出现在 magpie 侧的 [`magpie-wingwork-connect`](../magpie-wingwork-connect) 上。
+**修复方式**：在 iKooky（WingWork）桌面端**重新登录一次**，让桌面端重新签发令牌，然后重开会话即可。同样的报错也会出现在 magpie 侧的 [`magpie-wingwork-connect`](../../magpie/magpie-wingwork-connect) 上。
 
 ## 工作原理
 
@@ -97,14 +97,14 @@ One 平台的 HTML 403 拦截页 —— 与令牌无关。插件因此固定发�
 ### 方式 A：从 marketplace 安装（推荐）
 
 ```bash
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-wingwork-connect@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-wingwork-connect@ai-tool-plugins
 ```
 
 ### 方式 B：本地开发
 
 ```bash
-cd /path/to/omp-plugins/omp-wingwork-connect
+cd /path/to/ai-tool-plugins/omp/omp-wingwork-connect
 omp plugin link .
 ```
 

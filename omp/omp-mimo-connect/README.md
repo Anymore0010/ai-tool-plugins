@@ -38,8 +38,8 @@ shim 的工作只有三件：
 方式 A —— 从 marketplace 安装（推荐）：
 
 ```bash
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-mimo-connect@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-mimo-connect@ai-tool-plugins
 ```
 
 方式 B —— 本地开发：
@@ -52,7 +52,7 @@ omp plugin link <本目录绝对路径>          # 需 Windows 开发者模式�
 
 ```yaml
 extensions:
-  - D:/Projects/omp-plugins/omp-mimo-connect
+  - D:/Projects/ai-tool-plugins/omp/omp-mimo-connect
 ```
 
 ## 使用

@@ -1,16 +1,16 @@
 {
-  "name": "omp-plugins",
+  "name": "ai-tool-plugins",
   "owner": {
     "name": "Anymore0010"
   },
   "metadata": {
-    "description": "omp extensions that bridge desktop-app model accounts into omp, plus utilities.",
+    "description": "Desktop-app account bridges for AI coding tools: omp extensions, magpie provider plugins, and (planned) dsh plugins.",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "omp-workbuddy-connect",
-      "source": "./omp-workbuddy-connect",
+      "source": "./omp/omp-workbuddy-connect",
       "version": "0.1.5",
       "description": "把 WorkBuddy 桌面版模型接入 omp（零配置复用桌面端登录态）。",
       "license": "MIT",
@@ -18,7 +18,7 @@
     },
     {
       "name": "omp-mimo-connect",
-      "source": "./omp-mimo-connect",
+      "source": "./omp/omp-mimo-connect",
       "version": "0.1.0",
       "description": "把小米 MiMo 桌面版模型接入 omp（零配置复用小米账号登录态）。",
       "license": "MIT",
@@ -26,7 +26,7 @@
     },
     {
       "name": "omp-wingwork-connect",
-      "source": "./omp-wingwork-connect",
+      "source": "./omp/omp-wingwork-connect",
       "version": "0.1.1",
       "description": "把 iKooky（WingWork）桌面版账号的模型接入 omp（零配置复用桌面端登录态）。",
       "license": "MIT",
@@ -34,7 +34,7 @@
     },
     {
       "name": "omp-astudio-connect",
-      "source": "./omp-astudio-connect",
+      "source": "./omp/omp-astudio-connect",
       "version": "0.1.0",
       "description": "把 AStudio（讯飞 AstronClaw）桌面版账号的模型接入 omp（零配置复用桌面端登录态）。",
       "license": "MIT",
@@ -42,7 +42,7 @@
     },
     {
       "name": "omp-loomy-connect",
-      "source": "./omp-loomy-connect",
+      "source": "./omp/omp-loomy-connect",
       "version": "0.1.3",
       "description": "把 Loomy 桌面版账号的模型接入 omp（零配置复用桌面端登录态）。",
       "license": "MIT",
@@ -50,8 +50,8 @@
     },
     {
       "name": "omp-fast-update",
-      "source": "./omp-fast-update",
-      "version": "0.1.9",
+      "source": "./omp/omp-fast-update",
+      "version": "0.1.10",
       "description": "并发分片自更新：/omp-update 多连接下载 GitHub release 二进制，绕过 omp update 单连接限速。",
       "license": "MIT",
       "category": "utility"

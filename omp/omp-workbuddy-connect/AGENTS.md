@@ -1,11 +1,11 @@
 # AGENTS.md — omp-workbuddy-connect
 
-把 WorkBuddy 桌面版模型接入 [omp](https://omp.sh/) 的扩展。本文件是该**插件子目录**的开发与发布规范；仓库级规范（提交身份、marketplace 目录、tag 命名）见上级 [`../AGENTS.md`](../AGENTS.md)，两者冲突时以本文件对该插件的约定为准。
+把 WorkBuddy 桌面版模型接入 [omp](https://omp.sh/) 的扩展。本文件是该**插件子目录**的开发与发布规范；仓库级规范（提交身份、marketplace 目录、tag 命名）见上级 [`../AGENTS.md`](../../AGENTS.md)，两者冲突时以本文件对该插件的约定为准。
 
 ## 仓库概览
 
-- **所属仓库**：`https://github.com/Anymore0010/omp-plugins`（marketplace monorepo），本插件位于其 `omp-workbuddy-connect/` 子目录
-- **marketplace 名称**：`omp-plugins`；用户安装为 `omp plugin install omp-workbuddy-connect@omp-plugins`
+- **所属仓库**：`https://github.com/Anymore0010/ai-tool-plugins`（marketplace monorepo），本插件位于其 `omp/omp-workbuddy-connect/` 子目录
+- **marketplace 名称**：`ai-tool-plugins`；用户安装为 `omp plugin install omp-workbuddy-connect@ai-tool-plugins`
 - **默认分支**：`main`
 - **包名 / 版本**：`omp-workbuddy-connect`，版本号在 `package.json` 的 `version` 字段（同时必须同步到仓库根的 `.omp-plugin/marketplace.json`）
 - **运行时依赖**：无。扩展只用 Node 内置模块（`node:os/path/fs/http`）；`@oh-my-pi/pi-coding-agent` 仅作**类型**导入（运行时被擦除）。因此**分发物不需要 `node_modules`**。
@@ -62,7 +62,7 @@ git log --format='author=%an <%ae> | committer=%cn <%ce>' -1
 >
 > ⚠️ **tag 必须带插件名前缀**：本插件用 `omp-workbuddy-connect-v0.1.4`，不要用裸 `v0.1.4`（会与同仓库的 `omp-mimo-connect` 撞名）。
 >
-> ⚠️ **本插件的版本号有两处，必须同步**：`omp-workbuddy-connect/package.json#version` 与仓库根 `.omp-plugin/marketplace.json` 中该条目的 `version`——后者缺失或不一致会让 `omp plugin upgrade` 与开机自动更新静默跳过。
+> ⚠️ **本插件的版本号有两处，必须同步**：`omp/omp-workbuddy-connect/package.json#version` 与仓库根 `.omp-plugin/marketplace.json` 中该条目的 `version`——后者缺失或不一致会让 `omp plugin upgrade` 与开机自动更新静默跳过。
 
 ### 1. 同步与改代码
 
@@ -83,7 +83,7 @@ node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json
 ```bash
 omp models | grep workbuddy                            # 应列出 workbuddy (N)
 # 或临时指定入口：
-omp models -e D:/Projects/omp-plugins/omp-workbuddy-connect
+omp models -e D:/Projects/ai-tool-plugins/omp/omp-workbuddy-connect
 ```
 
 端到端调用（需本机 WorkBuddy 桌面版已登录）：
@@ -98,7 +98,7 @@ omp --model workbuddy/glm-5.3 -p "只回答：OK"
 
 ```bash
 # 例：0.1.3 → 0.1.4（在仓库根执行）
-node -e "const fs=require('fs');const f='omp-workbuddy-connect/package.json';const p=JSON.parse(fs.readFileSync(f));p.version='0.1.4';fs.writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+node -e "const fs=require('fs');const f='omp/omp-workbuddy-connect/package.json';const p=JSON.parse(fs.readFileSync(f));p.version='0.1.4';fs.writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
 node -e "const fs=require('fs');const f='.omp-plugin/marketplace.json';const c=JSON.parse(fs.readFileSync(f));c.plugins.find(x=>x.name==='omp-workbuddy-connect').version='0.1.4';fs.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
 ```
 
@@ -124,8 +124,8 @@ git push origin omp-workbuddy-connect-v0.1.4
 **不要手工挑选文件**——用 `git archive` 从当前 commit 导出，保证与 tag 内容完全一致，也自动排除 `node_modules`、`*.mts` 等未跟踪/已忽略文件：
 
 ```bash
-# 在仓库根目录执行（:omp-workbuddy-connect 只打包本插件子目录）
-git archive --format=zip -o ../omp-workbuddy-connect-portable.zip --prefix=omp-workbuddy-connect/ HEAD:omp-workbuddy-connect
+# 在仓库根目录执行（:omp/omp-workbuddy-connect 只打包本插件子目录）
+git archive --format=zip -o ../omp-workbuddy-connect-portable.zip --prefix=omp-workbuddy-connect/ HEAD:omp/omp-workbuddy-connect
 ```
 
 产物：`../omp-workbuddy-connect-portable.zip`，解压后顶层目录为 `omp-workbuddy-connect/`。
@@ -148,7 +148,7 @@ gh release create omp-workbuddy-connect-v0.1.4 --verify-tag ../omp-workbuddy-con
 # 创建 release（拿到 id）；tag 必须已推送，否则会被创建在默认分支 HEAD 上
 RID=$(curl -s -X POST \
   -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/Anymore0010/omp-plugins/releases \
+  https://api.github.com/repos/Anymore0010/ai-tool-plugins/releases \
   -d '{"tag_name":"omp-workbuddy-connect-v0.1.4","name":"omp-workbuddy-connect v0.1.4 — <标题>","body":"<变更说明>"}' \
   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).id))")
 
@@ -157,7 +157,7 @@ curl -s -X POST \
   -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
   -H "Content-Type: application/zip" \
   --data-binary @../omp-workbuddy-connect-portable.zip \
-  "https://uploads.github.com/repos/Anymore0010/omp-plugins/releases/$RID/assets?name=omp-workbuddy-connect-portable.zip"
+  "https://uploads.github.com/repos/Anymore0010/ai-tool-plugins/releases/$RID/assets?name=omp-workbuddy-connect-portable.zip"
 ```
 
 **方式 C（无凭据）**：在 GitHub 网页 Releases 页手动 Draft/发布 Release，并拖入 zip。
@@ -170,7 +170,7 @@ git status -sb                     # 应为 ## main...origin/main（无 ahead/be
 
 # 确认 release 有附件（方式 B 时）
 curl -s -H "Authorization: Bearer $GH_TOKEN" \
-  https://api.github.com/repos/Anymore0010/omp-plugins/releases/tags/omp-workbuddy-connect-v0.1.4 \
+  https://api.github.com/repos/Anymore0010/ai-tool-plugins/releases/tags/omp-workbuddy-connect-v0.1.4 \
   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);console.log(r.name);r.assets.forEach(a=>console.log(' asset:',a.name,a.size))})"
 ```
 
@@ -200,8 +200,8 @@ curl -s -H "Authorization: Bearer $GH_TOKEN" \
 
 ```bash
 # 从本仓库的 marketplace 安装（推荐）
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-workbuddy-connect@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-workbuddy-connect@ai-tool-plugins
 
 # 或下载 Release 的 portable zip，解压后
 omp plugin link .

@@ -34,7 +34,7 @@ Loomy 没有推理 API Key：登录讯飞账号后拿到的 **账号 session 令
 ## 安装
 
 ```bash
-magpie plugin add /path/to/omp-plugins/magpie-loomy-connect
+magpie plugin add /path/to/ai-tool-plugins/magpie/magpie-loomy-connect
 magpie plugin login loomy            # 只有一个方式：用桌面端的登录态
 magpie plugin                        # loomy (Loomy, N models)  signed in as <手机号>
 magpie provider test loomy           # 每个 API 发一个很小的请求
@@ -59,7 +59,7 @@ magpie quota                         # 两条进度条：每日 4962/5000 分（
 ```bash
 sb=$(mktemp -d)
 m() { env HOME=$sb XDG_CONFIG_HOME=$sb/.config XDG_CACHE_HOME=$sb/.cache MAGPIE_ADDR=127.0.0.1:3499 magpie "$@"; }
-m plugin add /path/to/omp-plugins/magpie-loomy-connect </dev/null
+m plugin add /path/to/ai-tool-plugins/magpie/magpie-loomy-connect </dev/null
 m plugin
 m plugin login loomy
 m provider test loomy
@@ -69,7 +69,7 @@ m quota
 
 ## 与 omp 插件的关系
 
-本仓库另有 [`omp-loomy-connect`](../omp-loomy-connect)，把同一个账号接进 **omp**。两者互不依赖、可同时安装，也可只装其一：magpie 侧不需要 omp 在跑。
+本仓库另有 [`omp-loomy-connect`](../../omp/omp-loomy-connect)，把同一个账号接进 **omp**。两者互不依赖、可同时安装，也可只装其一：magpie 侧不需要 omp 在跑。
 
 ## 关于对话记录
 

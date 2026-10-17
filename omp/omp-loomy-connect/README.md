@@ -55,14 +55,14 @@ Loomy 没有推理 API Key：它登录讯飞账号后把 **账号 session 令牌
 ### 方式 A：从 marketplace 安装（推荐）
 
 ```bash
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-loomy-connect@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-loomy-connect@ai-tool-plugins
 ```
 
 ### 方式 B：本地开发
 
 ```bash
-cd /path/to/omp-plugins/omp-loomy-connect
+cd /path/to/ai-tool-plugins/omp/omp-loomy-connect
 omp plugin link .          # 或 omp -e ./src/index.ts 临时加载
 ```
 

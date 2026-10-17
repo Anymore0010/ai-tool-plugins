@@ -34,7 +34,7 @@ GET https://one.iflytek.com/kooky-api/api/client/v3/cli/config
 
 **这对额度显示的影响**：WingWork 的月度额度（每月 $20）只能从这些面读，因此**当前无法显示额度**。本插件的 `usage` 钩子会在能读到时给出额度窗口，现在会返回一条明确的错误说明而不是空白。等桌面端重新登录、`/kooky-api` 面恢复后即可用。
 
-这**不是本插件引入的问题**：本仓库的 omp 插件 [`omp-wingwork-connect`](../omp-wingwork-connect) 现在报同样的错（它会把网关的原话带回给 omp）。
+这**不是本插件引入的问题**：本仓库的 omp 插件 [`omp-wingwork-connect`](../../omp/omp-wingwork-connect) 现在报同样的错（它会把网关的原话带回给 omp）。
 
 ### 顺带修好的一件事：令牌读取
 
@@ -70,7 +70,7 @@ GET {origin}/kooky-api/api/client/v1/provider-config/providers/kooky?channel=all
 ## 安装
 
 ```bash
-magpie plugin add /path/to/omp-plugins/magpie-wingwork-connect
+magpie plugin add /path/to/ai-tool-plugins/magpie/magpie-wingwork-connect
 magpie plugin login wingwork           # 只有一个方式：用桌面端的登录态
 magpie plugin                          # wingwork (WingWork, N models)  signed in as <账号>
 magpie provider test wingwork          # 每个 API 发一个很小的请求
@@ -105,7 +105,7 @@ magpie provider test wingwork          # 每个 API 发一个很小的请求
 ```bash
 sb=$(mktemp -d)
 m() { env HOME=$sb XDG_CONFIG_HOME=$sb/.config XDG_CACHE_HOME=$sb/.cache MAGPIE_ADDR=127.0.0.1:3499 magpie "$@"; }
-m plugin add /path/to/omp-plugins/magpie-wingwork-connect </dev/null
+m plugin add /path/to/ai-tool-plugins/magpie/magpie-wingwork-connect </dev/null
 m plugin
 m plugin login wingwork
 m provider test wingwork
@@ -113,7 +113,7 @@ m provider test wingwork
 
 ## 与 omp 插件的关系
 
-本仓库另有 [`omp-wingwork-connect`](../omp-wingwork-connect)，把同一个账号接进 **omp**。两者互不依赖、可同时安装（令牌各自只在各自进程内存里），也可只装其一。
+本仓库另有 [`omp-wingwork-connect`](../../omp/omp-wingwork-connect)，把同一个账号接进 **omp**。两者互不依赖、可同时安装（令牌各自只在各自进程内存里），也可只装其一。
 
 ## 关于对话记录
 

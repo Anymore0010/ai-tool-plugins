@@ -78,14 +78,14 @@ AStudio 桌面端由 Electron 外壳、随附的本地 server（`apps/server/dis
 ### 方式 A：从 marketplace 安装（推荐）
 
 ```bash
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-astudio-connect@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-astudio-connect@ai-tool-plugins
 ```
 
 ### 方式 B：本地开发
 
 ```bash
-cd /path/to/omp-plugins/omp-astudio-connect
+cd /path/to/ai-tool-plugins/omp/omp-astudio-connect
 omp plugin link .          # 或 omp -e ./src/index.ts 临时加载
 ```
 

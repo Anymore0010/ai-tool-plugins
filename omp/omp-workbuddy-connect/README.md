@@ -51,14 +51,14 @@ omp 对 `fetchDynamicModels` 的动态列表有 **24 小时缓存**：正常打�
 ### 方式 A：从 marketplace 安装（推荐）
 
 ```bash
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-workbuddy-connect@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-workbuddy-connect@ai-tool-plugins
 ```
 
 ### 方式 B：本地开发
 
 ```bash
-cd /path/to/omp-plugins/omp-workbuddy-connect
+cd /path/to/ai-tool-plugins/omp/omp-workbuddy-connect
 omp plugin link .
 ```
 
@@ -75,7 +75,7 @@ omp plugin doctor omp-workbuddy-connect   # 观察是否出现 "plugin: ... ok"
 >
 > ```yaml
 > extensions:
->   - /path/to/omp-plugins/omp-workbuddy-connect
+>   - /path/to/ai-tool-plugins/omp/omp-workbuddy-connect
 > ```
 
 ## 开发

@@ -19,15 +19,15 @@
 ## 安装
 
 ```bash
-omp plugin marketplace add Anymore0010/omp-plugins
-omp plugin install omp-fast-update@omp-plugins
+omp plugin marketplace add Anymore0010/ai-tool-plugins
+omp plugin install omp-fast-update@ai-tool-plugins
 ```
 
 或本地开发（`~/.omp/agent/config.yml`）：
 
 ```yaml
 extensions:
-  - D:/Projects/omp-plugins/omp-fast-update
+  - D:/Projects/ai-tool-plugins/omp/omp-fast-update
 ```
 
 ## 用法
@@ -117,7 +117,7 @@ shim 由 `omp-fast-update-run.mjs`（运行时解析）+ `.cmd`/`.ps1` 入口组
 ## 开发
 
 ```bash
-cd omp-fast-update
+cd omp/omp-fast-update
 npm install
 node node_modules/typescript/lib/tsc.js --noEmit -p tsconfig.json
 ```

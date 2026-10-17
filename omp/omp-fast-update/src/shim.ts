@@ -8,10 +8,14 @@
  *
  * The shim does NOT bake in a path that a marketplace upgrade would invalidate:
  * a plugin upgrade installs into a new versioned cache directory
- * (`.../cache/plugins/omp-plugins___omp-fast-update___<version>`), so a baked
+ * (`.../cache/plugins/<marketplace>___omp-fast-update___<version>`), so a baked
  * path would break on the upgrade the user is most likely to run next. Instead
  * the generated launchers resolve the newest installed copy at run time, then
  * fall back to the baking-in path, then fail with an actionable message.
+ *
+ * The marketplace segment is deliberately NOT pinned: the repo was renamed from
+ * `omp-plugins` to `ai-tool-plugins`, and installs made under the old name must
+ * keep resolving until they are reinstalled.
  *
  * The plugin is also discoverable via `~/.omp/agent/config.yml` (a source
  * checkout), so both layouts are searched.
@@ -30,7 +34,8 @@ const SHIM_NAME = "omp-fast-update"
 const SHIM_MARKER = `${SHIM_NAME} shim`
 /** Marketplace cache holding one directory per installed plugin version. */
 const CACHE_PLUGIN_GLOB_DIR = path.join(os.homedir(), ".omp", "plugins", "cache", "plugins")
-const CACHE_PLUGIN_PREFIX = "omp-plugins___omp-fast-update___"
+/** `<marketplace>___omp-fast-update___<version>` — the marketplace name is not pinned. */
+const CACHE_PLUGIN_MARKER = `___${SHIM_NAME}___`
 /** Relative path of the CLI entry inside any install layout. */
 const CLI_ENTRY_RELATIVE = path.join("src", "main.ts")
 
@@ -68,10 +73,10 @@ export function newestInstalledEntry(): string | undefined {
 		return undefined
 	}
 	const candidates = entries
-		.filter(name => name.startsWith(CACHE_PLUGIN_PREFIX))
+		.filter(name => name.includes(CACHE_PLUGIN_MARKER))
 		.map(name => ({
 			name,
-			version: name.slice(CACHE_PLUGIN_PREFIX.length).split("-")[0] ?? "",
+			version: name.slice(name.indexOf(CACHE_PLUGIN_MARKER) + CACHE_PLUGIN_MARKER.length).split("-")[0] ?? "",
 			entry: path.join(CACHE_PLUGIN_GLOB_DIR, name, CLI_ENTRY_RELATIVE),
 		}))
 		.filter(candidate => fs.existsSync(candidate.entry))
@@ -107,7 +112,7 @@ import { homedir } from "node:os";
 import { join, isAbsolute, resolve } from "node:path";
 const HOME = homedir();
 const CACHE = join(HOME, ".omp", "plugins", "cache", "plugins");
-const PREFIX = "${CACHE_PLUGIN_PREFIX}";
+const MARKER = "${CACHE_PLUGIN_MARKER}";
 const REL = ${JSON.stringify(CLI_ENTRY_RELATIVE)};
 const BAKED = ${JSON.stringify(CLI_ENTRY)};
 const NAME = "${SHIM_NAME}";
@@ -163,15 +168,16 @@ if (direct) {
 const candidates = [];
 try {
   for (const name of readdirSync(CACHE)) {
-    if (!name.startsWith(PREFIX)) continue;
+    const at = name.indexOf(MARKER);
+    if (at < 0) continue;
     const entry = join(CACHE, name, REL);
-    if (existsSync(entry)) candidates.push({ v: name.slice(PREFIX.length).split("-")[0], entry });
+    if (existsSync(entry)) candidates.push({ v: name.slice(at + MARKER.length).split("-")[0], entry });
   }
 } catch {}
 candidates.sort((a, b) => cmp(b.v, a.v));
 const entry = candidates[0]?.entry ?? (existsSync(BAKED) ? BAKED : undefined);
 if (entry === undefined) {
-  console.error(NAME + ": 找不到插件安装位置（请先 omp plugin install omp-fast-update@omp-plugins，或重跑 --install-cli）");
+  console.error(NAME + ": 找不到插件安装位置（请先 omp plugin install omp-fast-update@ai-tool-plugins，或重跑 --install-cli）");
   process.exit(1);
 }
 const child = Bun.spawn(["bun", entry, ...process.argv.slice(2)], { stdio: ["inherit", "inherit", "inherit"] });
@@ -271,7 +277,7 @@ export async function shimStatus(): Promise<ShimResult> {
 		message:
 			resolved !== undefined
 				? `已安装（${origin}：${resolved}）`
-				: `已安装但找不到插件副本；先 omp plugin install omp-fast-update@omp-plugins 或在 config.yml 挂载仓库路径`,
+				: `已安装但找不到插件副本；先 omp plugin install omp-fast-update@ai-tool-plugins 或在 config.yml 挂载仓库路径`,
 		paths: existing,
 	}
 }
